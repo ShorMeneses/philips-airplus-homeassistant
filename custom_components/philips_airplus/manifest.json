@@ -2,11 +2,11 @@
   "domain": "philips_airplus",
   "name": "Philips Air+",
   "version": "0.1.0",
-  "documentation": "https://github.com/shormeneses/philips-airplus-homeassistant",
-  "issue_tracker": "https://github.com/shormeneses/philips-airplus-homeassistant/issues",
+  "documentation": "https://github.com/ShorMeneses/philips-airplus-homeassistant",
+  "issue_tracker": "https://github.com/ShorMeneses/philips-airplus-homeassistant/issues",
   "dependencies": [],
   "codeowners": [
-    "@shormeneses"
+    "@ShorMeneses"
   ],
   "requirements": [
     "paho-mqtt>=1.6.0"

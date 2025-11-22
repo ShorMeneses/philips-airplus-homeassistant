@@ -20,7 +20,7 @@ This custom integration allows you to control your Philips Air+ AC0650/10 air pu
 
 1. Go to HACS > Integrations
 2. Click the three dots menu and select "Custom repositories"
-3. Add repository: `https://github.com/shormeneses/philips-airplus-homeassistant`
+3. Add repository: `https://github.com/ShorMeneses/philips-airplus-homeassistant`
 4. Select "Integration" as category
 5. Click "Add"
 6. Go to HACS > Integrations and search for "Philips Air+"
@@ -49,7 +49,6 @@ You need a Philips Air+ account with your device already set up in the official 
 ## Development
 
 This integration is based on reverse-engineering the Philips Air+ mobile app protocol.
-
 
 ## Limitations
 
