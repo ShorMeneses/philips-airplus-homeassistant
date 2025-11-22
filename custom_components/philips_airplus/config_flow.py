@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import voluptuous as vol
@@ -24,6 +25,7 @@ from .const import (
     CONF_DEVICE_UUID,
     CONF_ENABLE_MQTT,
     CONF_REFRESH_TOKEN,
+    CONF_TOKEN_EXPIRES_AT,
     CONF_USER_ID,
     DEFAULT_CLIENT_ID,
     DOMAIN,
@@ -42,6 +44,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._auth_mode: str = AUTH_MODE_OAUTH
         self._access_token: Optional[str] = None
         self._refresh_token: Optional[str] = None
+        self._token_expires_at: Optional[int] = None
         self._devices: List[PhilipsAirplusDevice] = []
         self._auth: Optional[PhilipsAirplusAuth] = None
         self._client_id: Optional[str] = None
@@ -105,6 +108,15 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             token_data = await impl.async_request_token(auth_code, getattr(self, "_oauth_flow_id", ""))
             access_token = token_data.get("access_token") or token_data.get("accessToken")
             refresh_token = token_data.get("refresh_token") or token_data.get("refreshToken")
+            
+            # Extract token expiration (exp claim or expires_in)
+            token_expires_at = None
+            exp = token_data.get("exp")
+            expires_in = token_data.get("expires_in")
+            if exp:
+                token_expires_at = int(exp)
+            elif expires_in:
+                token_expires_at = int((datetime.now() + timedelta(seconds=int(expires_in))).timestamp())
 
             if not access_token:
                 _LOGGER.error("Token response did not contain access_token: %s", token_data)
@@ -123,6 +135,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             self._access_token = access_token
             self._refresh_token = refresh_token
+            self._token_expires_at = token_expires_at
             self._devices = [PhilipsAirplusDevice(device_data) for device_data in devices_data]
 
             if not self._devices:
@@ -172,6 +185,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_AUTH_MODE: self._auth_mode,
                     CONF_ACCESS_TOKEN: self._access_token,
                     CONF_REFRESH_TOKEN: self._refresh_token,
+                    CONF_TOKEN_EXPIRES_AT: self._token_expires_at,
                     CONF_DEVICE_ID: selected_device.uuid,
                     CONF_DEVICE_UUID: selected_device.uuid,
                     CONF_DEVICE_NAME: selected_device.name,
@@ -208,6 +222,13 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle reauthentication."""
         return await self.async_step_user()
+
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Get the options flow for this handler."""
+        return PhilipsAirplusOptionsFlowHandler(config_entry)
 
 
 class PhilipsAirplusOptionsFlowHandler(config_entries.OptionsFlow):

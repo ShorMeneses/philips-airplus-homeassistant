@@ -223,6 +223,18 @@ class PhilipsAirplusAuth:
                 
             _LOGGER.info("Successfully refreshed access token")
             return True
+        except RuntimeError as ex:
+            error_msg = str(ex)
+            # Check if refresh token is revoked (400 error with invalid_grant)
+            if "400" in error_msg and "invalid_grant" in error_msg:
+                _LOGGER.error("Refresh token has been revoked. Please re-authenticate the integration.")
+                # Clear refresh token to prevent further attempts
+                self.refresh_token = None
+                # Set expires_at far in the future to prevent continuous refresh attempts
+                self.expires_at = datetime.now() + timedelta(days=365)
+            else:
+                _LOGGER.error("Failed to refresh token: %s", ex)
+            return False
         except Exception as ex:
             _LOGGER.error("Failed to refresh token: %s", ex)
             return False

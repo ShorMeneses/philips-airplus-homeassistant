@@ -26,6 +26,7 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_DEVICE_UUID,
     CONF_REFRESH_TOKEN,
+    CONF_TOKEN_EXPIRES_AT,
     DEFAULT_CLIENT_ID,
     PORT_CONFIG,
     PORT_FILTER_READ,
@@ -76,6 +77,12 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             refresh_token=entry.data.get(CONF_REFRESH_TOKEN),
             client_id=entry.data.get(CONF_CLIENT_ID, DEFAULT_CLIENT_ID),
         )
+        
+        # Load stored token expiration if available
+        token_expires_at = entry.data.get(CONF_TOKEN_EXPIRES_AT)
+        if token_expires_at:
+            self._auth.expires_at = datetime.fromtimestamp(int(token_expires_at))
+            _LOGGER.debug("Loaded token expiration from config: %s", self._auth.expires_at)
         
         # Initialize API client
         self._api_client = PhilipsAirplusAPIClient(self._auth.access_token or "")
@@ -207,6 +214,20 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             self.hass.async_create_task(self._request_initial_status())
         else:
             _LOGGER.warning("Disconnected from Philips Air+ device %s", self._device_name)
+            # Schedule automatic reconnection attempt after 30 seconds
+            async def _reconnect_later():
+                await asyncio.sleep(30)
+                if not self._connected and self._mqtt_client:
+                    _LOGGER.info("Attempting to reconnect MQTT for %s", self._device_name)
+                    try:
+                        if await self._mqtt_client.async_connect():
+                            _LOGGER.info("MQTT reconnection successful for %s", self._device_name)
+                        else:
+                            _LOGGER.warning("MQTT reconnection failed for %s", self._device_name)
+                    except Exception as ex:
+                        _LOGGER.error("Error during MQTT reconnection: %s", ex)
+            
+            self.hass.async_create_task(_reconnect_later())
             
         # Trigger update so 'available' state is refreshed immediately
         self.async_set_updated_data({
