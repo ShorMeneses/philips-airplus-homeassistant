@@ -1,0 +1,45 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Philips Air+",
+        "description": "{instructions}",
+        "data": {
+          "client_id": "Client ID"
+        },
+        "data_description": {
+          "client_id": "Your Philips Air+ Client ID"
+        }
+      },
+      "oauth": {
+        "title": "OAuth Authentication",
+        "description": "{instructions}"
+      },
+      "select_device": {
+        "title": "Select Device",
+        "description": "Choose the Philips Air+ device you want to control",
+        "data": {
+          "device": "Device"
+        }
+      }
+    },
+    "error": {
+      "invalid_token": "Invalid access token. Please check your token and try again.",
+      "no_devices": "No devices found in your Philips Air+ account.",
+      "auth_failed": "Authentication failed. Please try again.",
+      "cannot_connect": "Unable to connect to Philips Air+ service."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "auth_failed": "Authentication failed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Philips Air+ Options",
+        "description": "Authentication Mode: {auth_mode}\nDevice: {device_name}"
+      }
+    }
+  }
+}

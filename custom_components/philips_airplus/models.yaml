@@ -1,0 +1,26 @@
+# Philips Air+ Device Models Configuration
+
+# Default model if none matches
+default: "AC0650/10"
+
+models:
+  "AC0650/10":
+    name: "Philips Air+ AC0650/10"
+    modes:
+      Auto: 1
+      Sleep: 17
+      Turbo: 18
+    speeds: [17, 1, 18]  # Ordered by intensity: Sleep (quietest), Auto (medium), Turbo (loudest)
+    protocol:
+      transport: mqtt
+      topic_template: "da_ctrl/{device_id}/to_ncp"
+    properties:
+      fan_speed: "D0310C"
+      mode: "D0310C"
+      power: "D0310D"
+      filter_replace_nominal: "D05408"
+      filter_replace_remaining: "D0540E"
+      filter_clean_nominal: "D05207"
+      filter_clean_remaining: "D0520D"
+      device_model: "ctn"
+      device_brand: "D01S04"
