@@ -12,7 +12,7 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable, Awaitable
 
 import aiohttp
 from homeassistant.core import HomeAssistant
@@ -143,6 +143,7 @@ class PhilipsAirplusAuth:
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
         client_id: Optional[str] = None,
+        token_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
     ) -> None:
         self.hass = hass
         self.auth_mode = auth_mode
@@ -152,6 +153,7 @@ class PhilipsAirplusAuth:
         self.user_id: Optional[str] = None
         self.signature: Optional[str] = None
         self._client_id = client_id
+        self._token_callback = token_callback
 
     async def initialize(self) -> bool:
         """Initialize authentication and fetch user details."""
@@ -222,6 +224,19 @@ class PhilipsAirplusAuth:
                 # Continue anyway - signature refresh is not critical for token refresh success
                 
             _LOGGER.info("Successfully refreshed access token")
+            
+            # Notify callback if registered
+            if self._token_callback:
+                try:
+                    await self._token_callback({
+                        "access_token": self.access_token,
+                        "refresh_token": self.refresh_token,
+                        "expires_at": self.expires_at.timestamp() if self.expires_at else None,
+                        "client_id": self._client_id
+                    })
+                except Exception as cb_ex:
+                    _LOGGER.error("Failed to execute token callback: %s", cb_ex)
+            
             return True
         except RuntimeError as ex:
             error_msg = str(ex)

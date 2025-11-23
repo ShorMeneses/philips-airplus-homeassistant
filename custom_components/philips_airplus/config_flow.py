@@ -51,6 +51,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._oauth_flow_id: Optional[str] = None
         self._oauth_authorize_url: Optional[str] = None
         self._oauth_instructions: Optional[str] = None
+        self._reauth_entry: Optional[config_entries.ConfigEntry] = None
 
     async def async_step_user(
         self, user_input: Optional[Dict[str, Any]] = None
@@ -195,6 +196,17 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 
                 await self._auth.close()
                 
+                if self._reauth_entry:
+                    # Update existing entry
+                    self.hass.config_entries.async_update_entry(
+                        self._reauth_entry,
+                        data=data
+                    )
+                    self.hass.async_create_task(
+                        self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+                    )
+                    return self.async_abort(reason="reauth_successful")
+                
                 return self.async_create_entry(
                     title=selected_device.name,
                     data=data
@@ -221,6 +233,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
         """Handle reauthentication."""
+        self._reauth_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
         return await self.async_step_user()
 
     @staticmethod

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
@@ -76,6 +77,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             access_token=entry.data.get(CONF_ACCESS_TOKEN),
             refresh_token=entry.data.get(CONF_REFRESH_TOKEN),
             client_id=entry.data.get(CONF_CLIENT_ID, DEFAULT_CLIENT_ID),
+            token_callback=self._on_token_refresh,
         )
         
         # Load stored token expiration if available
@@ -107,6 +109,22 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self._connected = False
         self._last_update: Optional[datetime] = None
         self._last_full_request: Optional[datetime] = None
+        
+    async def _on_token_refresh(self, token_data: Dict[str, Any]) -> None:
+        """Handle token refresh events."""
+        _LOGGER.debug("Token refreshed, updating config entry")
+        
+        # Update config entry with new token data
+        new_data = {**self.entry.data}
+        new_data[CONF_ACCESS_TOKEN] = token_data.get("access_token")
+        new_data[CONF_REFRESH_TOKEN] = token_data.get("refresh_token")
+        new_data[CONF_TOKEN_EXPIRES_AT] = token_data.get("expires_at")
+        
+        self.hass.config_entries.async_update_entry(
+            self.entry,
+            data=new_data
+        )
+        _LOGGER.info("Config entry updated with new tokens")
 
     @property
     def device_id(self) -> str:
@@ -145,7 +163,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         try:
             # Initialize authentication
             if not await self._auth.initialize():
-                raise UpdateFailed("Failed to initialize authentication")
+                raise ConfigEntryAuthFailed("Failed to initialize authentication")
             
             # Update API client with potentially refreshed token
             self._api_client = PhilipsAirplusAPIClient(self._auth.access_token or "")
