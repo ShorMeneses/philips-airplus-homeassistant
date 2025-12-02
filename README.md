@@ -12,7 +12,7 @@ This custom integration allows you to control your Philips Air+ AC0650/10 air pu
 ## Supported Devices
 
 - Philips Air+ AC0650/10 (tested)
-- Other Air+ models may work but are not tested (Most likely could be easily ported)
+- Other Air+ models very unlikely to work!! (Most likely could be easily ported)
 
 ## Installation
 
@@ -39,7 +39,7 @@ You need a Philips Air+ account with your device already set up in the official 
 
 ### Authentication Methods
 
-#### Method 1: OAuth PKCE Flow (
+#### Method 1: OAuth PKCE Flow
 
 1. Login to the Philips website, on the website present in HA when configuring
 2. After login the last request (check on dev tools) will be similar to this: com.philips.air://loginredirect?code=st2.xxxxxxx.sc3&state=xxxx
