@@ -17,7 +17,7 @@ from .api import (
     PhilipsAirplusDevice,
     build_client_id
 )
-from .auth import PhilipsAirplusAuth
+from .auth import PhilipsAirplusAuth, AuthenticationExpired
 from .const import (
     AUTH_MODE_OAUTH,
     CONF_ACCESS_TOKEN,
@@ -89,9 +89,9 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         # Initialize API client
         self._api_client = PhilipsAirplusAPIClient(self._auth.access_token or "")
         
-        # Initialize Model Manager
+        # Initialize Model Manager (models are loaded asynchronously during setup)
         component_path = os.path.dirname(__file__)
-        self._model_manager = PhilipsAirplusModelManager(component_path)
+        self._model_manager = PhilipsAirplusModelManager(hass, component_path)
 
         # Initialize MQTT client
         self._mqtt_client: Optional[PhilipsAirplusMQTTClient] = None
@@ -100,10 +100,9 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self._device_state: Dict[str, Any] = {}
         self._filter_data: Dict[str, Any] = {}
 
-
-        # Load model config (defaulting to AC0650/10 until we know better)
-        # We might update this once we get the model from the device
-        self._model_config = self._model_manager.get_model_config("AC0650/10")
+        # Model config will be loaded after async_load_models() is called
+        # Defaulting to empty dict until then
+        self._model_config: Dict[str, Any] = {}
         
         # Connection status
         self._connected = False
@@ -161,6 +160,12 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     async def _async_setup(self) -> None:
         """Set up the coordinator."""
         try:
+            # Load models asynchronously (fixes blocking I/O warning)
+            await self._model_manager.async_load_models()
+            
+            # Load default model config (will be updated when we get model from device)
+            self._model_config = self._model_manager.get_model_config("AC0650/10")
+            
             # Initialize authentication
             if not await self._auth.initialize():
                 raise ConfigEntryAuthFailed("Failed to initialize authentication")
@@ -195,6 +200,12 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             # Schedule initial status request (it is now async)
             self.hass.async_create_task(self._request_initial_status())
             
+        except AuthenticationExpired as ex:
+            # Auth failed permanently during setup - trigger reauth flow
+            raise ConfigEntryAuthFailed("Authentication expired, please re-authenticate") from ex
+        except ConfigEntryAuthFailed:
+            # Re-raise ConfigEntryAuthFailed as-is
+            raise
         except Exception as ex:
             raise UpdateFailed(f"Failed to set up coordinator: {ex}") from ex
 
@@ -389,14 +400,19 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             raise UpdateFailed("MQTT client not connected")
         
         # Ensure token is valid before request
-        if await self._auth.ensure_access_token():
-             # If token was refreshed, update MQTT credentials
-             if self._mqtt_client and self._mqtt_client.access_token != self._auth.access_token:
-                 _LOGGER.info("Token refreshed, updating MQTT credentials")
-                 await self._mqtt_client.async_update_credentials(
-                     self._auth.access_token,
-                     self._auth.signature
-                 )
+        try:
+            token_valid = await self._auth.ensure_access_token()
+            if token_valid:
+                # If token was refreshed, update MQTT credentials
+                if self._mqtt_client and self._mqtt_client.access_token != self._auth.access_token:
+                    _LOGGER.info("Token refreshed, updating MQTT credentials")
+                    await self._mqtt_client.async_update_credentials(
+                        self._auth.access_token,
+                        self._auth.signature
+                    )
+        except AuthenticationExpired as ex:
+            # Token refresh failed permanently - trigger HA's reauth flow
+            raise ConfigEntryAuthFailed("Authentication expired, please re-authenticate") from ex
 
         # Request status update
         self._mqtt_client.request_port_status(PORT_STATUS)

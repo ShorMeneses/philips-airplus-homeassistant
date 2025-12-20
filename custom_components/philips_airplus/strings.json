@@ -21,6 +21,10 @@
         "data": {
           "device": "Device"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Philips Air+",
+        "description": "Your authentication token has expired. Please re-authenticate to continue using your Philips Air+ device."
       }
     },
     "error": {
@@ -31,7 +35,8 @@
     },
     "abort": {
       "already_configured": "This device is already configured.",
-      "auth_failed": "Authentication failed."
+      "auth_failed": "Authentication failed.",
+      "reauth_successful": "Re-authentication successful."
     }
   },
   "options": {

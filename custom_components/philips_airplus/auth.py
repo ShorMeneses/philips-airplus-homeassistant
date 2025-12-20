@@ -32,6 +32,11 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+class AuthenticationExpired(Exception):
+    """Raised when authentication has expired and reauth is required."""
+    pass
+
+
 class PhilipsAirplusOAuth2Implementation:
     """Lightweight PKCE OAuth helper (manual code copy flow)."""
 
@@ -240,13 +245,13 @@ class PhilipsAirplusAuth:
             return True
         except RuntimeError as ex:
             error_msg = str(ex)
-            # Check if refresh token is revoked (400 error with invalid_grant)
-            if "400" in error_msg and "invalid_grant" in error_msg:
-                _LOGGER.error("Refresh token has been revoked. Please re-authenticate the integration.")
+            # Check if refresh token is revoked/expired (400 with invalid_grant or 401)
+            if ("400" in error_msg and "invalid_grant" in error_msg) or "401" in error_msg:
+                _LOGGER.error("Refresh token has expired or been revoked. Triggering re-authentication.")
                 # Clear refresh token to prevent further attempts
                 self.refresh_token = None
-                # Set expires_at far in the future to prevent continuous refresh attempts
-                self.expires_at = datetime.now() + timedelta(days=365)
+                # Raise exception to trigger HA's reauth flow
+                raise AuthenticationExpired("Token refresh failed - reauthentication required") from ex
             else:
                 _LOGGER.error("Failed to refresh token: %s", ex)
             return False

@@ -6,29 +6,38 @@ import os
 import yaml
 from typing import Any, Dict, Optional
 
+from homeassistant.core import HomeAssistant
+
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class PhilipsAirplusModelManager:
     """Manager for device models."""
 
-    def __init__(self, component_path: str) -> None:
+    def __init__(self, hass: HomeAssistant, component_path: str) -> None:
         """Initialize the model manager."""
+        self._hass = hass
+        self._component_path = component_path
         self._models: Dict[str, Any] = {}
         self._default_model: Optional[str] = None
-        self._load_models(component_path)
 
-    def _load_models(self, component_path: str) -> None:
-        """Load models from yaml file."""
-        yaml_path = os.path.join(component_path, "models.yaml")
-        try:
-            # Note: This uses blocking I/O but it's acceptable for one-time initialization
+    async def async_load_models(self) -> None:
+        """Load models from yaml file asynchronously."""
+        yaml_path = os.path.join(self._component_path, "models.yaml")
+        
+        def _load_yaml():
+            """Load YAML file in executor."""
             with open(yaml_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-                self._models = data.get("models", {})
-                self._default_model = data.get("default")
-                _LOGGER.debug("Loaded %d models from %s", len(self._models), yaml_path)
+                return yaml.safe_load(f)
+        
+        try:
+            # Run blocking file I/O in executor to avoid blocking event loop
+            data = await self._hass.async_add_executor_job(_load_yaml)
+            self._models = data.get("models", {})
+            self._default_model = data.get("default")
+            _LOGGER.debug("Loaded %d models from %s", len(self._models), yaml_path)
         except Exception as ex:
             _LOGGER.error("Failed to load models.yaml: %s", ex)
 

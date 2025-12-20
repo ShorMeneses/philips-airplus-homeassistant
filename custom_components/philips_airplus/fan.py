@@ -42,6 +42,7 @@ class PhilipsAirplusFan(CoordinatorEntity, FanEntity):
 
     _attr_has_entity_name = True
     _attr_name = None
+    _attr_force_update = True  # Force HA to record state updates even if unchanged
     _attr_supported_features = (
         FanEntityFeature.SET_SPEED |
         FanEntityFeature.PRESET_MODE |
@@ -219,5 +220,12 @@ class PhilipsAirplusFan(CoordinatorEntity, FanEntity):
             attributes["raw_speed"] = raw_speed
         
         attributes["connected"] = self.coordinator.is_connected
+        
+        # Include last update timestamp to ensure HA updates "last updated" on each refresh
+        # Use coordinator.data which is updated via async_set_updated_data()
+        if self.coordinator.data:
+            last_update = self.coordinator.data.get("last_update")
+            if last_update:
+                attributes["last_update"] = last_update.isoformat()
         
         return attributes
