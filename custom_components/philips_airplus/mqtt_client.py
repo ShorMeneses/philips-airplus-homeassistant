@@ -64,6 +64,7 @@ class PhilipsAirplusMQTTClient:
         self._message_callback: Optional[Callable[[Dict[str, Any]], None]] = None
         self._connection_callback: Optional[Callable[[bool], None]] = None
         self._last_nonzero_speed: int = 8
+        self._refreshing_credentials: bool = False  # Flag to maintain availability during credential refresh
         
         self.outbound_topic = TOPIC_CONTROL_TEMPLATE.format(device_id=self.device_id)
         self.inbound_topic = TOPIC_STATUS_TEMPLATE.format(device_id=self.device_id)
@@ -257,8 +258,12 @@ class PhilipsAirplusMQTTClient:
                 self._connected = False
 
     def is_connected(self) -> bool:
-        """Check if MQTT client is connected."""
-        return self._connected
+        """Check if MQTT client is connected.
+        
+        Returns True during credential refresh to prevent unavailable state
+        while reconnecting with new tokens.
+        """
+        return self._connected or self._refreshing_credentials
 
     def _generate_correlation_id(self) -> str:
         """Generate a correlation ID for commands."""
@@ -416,7 +421,10 @@ class PhilipsAirplusMQTTClient:
             return False
 
     async def async_update_credentials(self, access_token: str, signature: str) -> bool:
-        """Update credentials and reconnect."""
+        """Update credentials and reconnect.
+        
+        Sets _refreshing_credentials flag to maintain availability during reconnection.
+        """
         self.access_token = access_token
         self.signature = signature
         
@@ -425,5 +433,11 @@ class PhilipsAirplusMQTTClient:
                 _LOGGER.debug("Connect in progress; deferring credential update")
                 return False
         
-        self.disconnect()
-        return await self.async_connect()
+        # Set flag to prevent unavailable state during reconnection
+        self._refreshing_credentials = True
+        try:
+            self.disconnect()
+            result = await self.async_connect()
+            return result
+        finally:
+            self._refreshing_credentials = False

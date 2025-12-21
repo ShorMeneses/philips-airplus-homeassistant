@@ -17,7 +17,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
@@ -81,7 +81,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class PhilipsAirplusSensor(SensorEntity):
+class PhilipsAirplusSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Philips Air+ sensor."""
 
     _attr_has_entity_name = True
@@ -93,7 +93,7 @@ class PhilipsAirplusSensor(SensorEntity):
         description: SensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         self.entry = entry
         self.entity_description = description
         
@@ -118,14 +118,15 @@ class PhilipsAirplusSensor(SensorEntity):
         
         if key.startswith("filter_"):
             # Filter data from filter_info
-            filter_info = self.coordinator.data.get("filter_info", {})
-            return filter_info.get(key.replace("filter_", ""))
+            if self.coordinator.data:
+                filter_info = self.coordinator.data.get("filter_info", {})
+                return filter_info.get(key.replace("filter_", ""))
         
         return None
 
-    async def async_update(self) -> None:
-        """Update the sensor state."""
-        await self.coordinator.async_request_refresh()
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -133,7 +134,7 @@ class PhilipsAirplusSensor(SensorEntity):
         key = self.entity_description.key
         attributes = {}
         
-        if key.startswith("filter_"):
+        if key.startswith("filter_") and self.coordinator.data:
             # Add filter hours total if available (use calculated filter_info from coordinator data)
             filter_info = self.coordinator.data.get("filter_info", {})
             if key == "filter_replace_percentage":
