@@ -142,7 +142,13 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
     @property
     def is_connected(self) -> bool:
-        """Check if device is connected."""
+        """Check if device is connected.
+        
+        Also checks MQTT client's is_connected() which returns True during
+        credential refresh to prevent unavailable state.
+        """
+        if self._mqtt_client:
+            return self._mqtt_client.is_connected()
         return self._connected
 
     @property

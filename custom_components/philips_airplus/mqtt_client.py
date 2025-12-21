@@ -146,7 +146,9 @@ class PhilipsAirplusMQTTClient:
                 pass
             self._client = None
         self._connected = False
-        if self._connection_callback:
+        
+        # Skip connection callback during credential refresh to prevent unavailable state
+        if self._connection_callback and not self._refreshing_credentials:
             self._connection_callback(False)
 
     def _blocking_connect(self, timeout: float = 15.0) -> bool:
