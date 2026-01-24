@@ -209,11 +209,15 @@ class PhilipsAirplusMQTTClient:
             
             if not self._connected:
                 _LOGGER.error("Connection timeout after %.2fs", time.time() - start_ts)
-                self._client.loop_stop()
-                try:
-                    self._client.disconnect()
-                except Exception:
-                    pass
+                if self._client:
+                    try:
+                        self._client.loop_stop()
+                    except Exception:
+                        pass
+                    try:
+                        self._client.disconnect()
+                    except Exception:
+                        pass
                 self._client = None
                 return False
             
@@ -248,16 +252,17 @@ class PhilipsAirplusMQTTClient:
 
     def disconnect(self) -> None:
         """Disconnect from MQTT broker."""
-        if self._client:
-            try:
-                self._client.loop_stop()
-                self._client.disconnect()
-                _LOGGER.debug("MQTT disconnected")
-            except Exception as ex:
-                _LOGGER.error("Error disconnecting MQTT: %s", ex)
-            finally:
-                self._client = None
-                self._connected = False
+        with self._lock:
+            if self._client:
+                try:
+                    self._client.loop_stop()
+                    self._client.disconnect()
+                    _LOGGER.debug("MQTT disconnected")
+                except Exception as ex:
+                    _LOGGER.error("Error disconnecting MQTT: %s", ex)
+                finally:
+                    self._client = None
+            self._connected = False
 
     def is_connected(self) -> bool:
         """Check if MQTT client is connected.
@@ -439,6 +444,7 @@ class PhilipsAirplusMQTTClient:
         self._refreshing_credentials = True
         try:
             self.disconnect()
+            await asyncio.sleep(1)  # Allow time for socket cleanup
             result = await self.async_connect()
             return result
         finally:

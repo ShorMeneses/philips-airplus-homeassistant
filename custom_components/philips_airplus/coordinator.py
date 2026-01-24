@@ -112,6 +112,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     async def _on_token_refresh(self, token_data: Dict[str, Any]) -> None:
         """Handle token refresh events."""
         _LOGGER.debug("Token refreshed, updating config entry")
+        _LOGGER.info("Processing token refresh. Expires at: %s", token_data.get("expires_at"))
         
         # Update config entry with new token data
         new_data = {**self.entry.data}
@@ -412,10 +413,14 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 # If token was refreshed, update MQTT credentials
                 if self._mqtt_client and self._mqtt_client.access_token != self._auth.access_token:
                     _LOGGER.info("Token refreshed, updating MQTT credentials")
-                    await self._mqtt_client.async_update_credentials(
+                    success = await self._mqtt_client.async_update_credentials(
                         self._auth.access_token,
                         self._auth.signature
                     )
+                    if not success:
+                       _LOGGER.warning("Failed to update MQTT credentials following token refresh")
+                    else:
+                       _LOGGER.info("MQTT credentials successfully updated")
         except AuthenticationExpired as ex:
             # Token refresh failed permanently - trigger HA's reauth flow
             raise ConfigEntryAuthFailed("Authentication expired, please re-authenticate") from ex
