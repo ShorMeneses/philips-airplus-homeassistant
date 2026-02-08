@@ -40,7 +40,7 @@ You need a Philips Air+ account with your device already set up in the official 
 ### Authentication Methods
 
 #### Method 1: OAuth PKCE Flow
-
+0. Video showing how to get the code: `https://www.youtube.com/watch?v=bufBp3h0xos`
 1. In Home Assistant, add/configure the integration and copy the login URL shown in the UI (this is the Philips/Versuni OAuth page, usually under `https://cdc.accounts.home.id/...`).
 2. Open that URL in your browser.
 3. Before logging in, open browser DevTools and switch to the **Network** tab.
