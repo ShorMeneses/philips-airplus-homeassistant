@@ -13,7 +13,13 @@
       },
       "oauth": {
         "title": "OAuth Authentication",
-        "description": "{instructions}"
+        "description": "{instructions}",
+        "data": {
+          "auth_code": "Authorization Code"
+        },
+        "data_description": {
+          "auth_code": "Paste the code value from the login redirect URL"
+        }
       },
       "manual_token": {
         "title": "Manual Token Entry",
@@ -34,10 +40,12 @@
       }
     },
     "error": {
+      "missing_code": "Authorization code is required.",
       "invalid_token": "Invalid access token. Please check your token and try again.",
       "no_devices": "No devices found in your Philips Air+ account.",
       "auth_failed": "Authentication failed. Please try again.",
-      "cannot_connect": "Unable to connect to Philips Air+ service."
+      "cannot_connect": "Unable to connect to Philips Air+ service.",
+      "unknown": "Unexpected error during authentication."
     },
     "abort": {
       "already_configured": "This device is already configured.",
@@ -48,7 +56,15 @@
     "step": {
       "init": {
         "title": "Philips Air+ Options",
-        "description": "Authentication Mode: {auth_mode}\nDevice: {device_name}"
+        "description": "Authentication Mode: {auth_mode}\nDevice: {device_name}\n\n{instructions}",
+        "data": {
+          "enable_mqtt": "Enable MQTT",
+          "auth_code": "Authorization Code (optional)"
+        },
+        "data_description": {
+          "enable_mqtt": "Disable to stop cloud/MQTT activity for this integration",
+          "auth_code": "Paste a fresh OAuth code to re-authenticate without removing the integration"
+        }
       }
     }
   }

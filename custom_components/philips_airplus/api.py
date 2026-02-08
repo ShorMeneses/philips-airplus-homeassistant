@@ -1,4 +1,5 @@
 """API client for Philips Air+ integration."""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +12,7 @@ import aiohttp
 from .const import (
     API_BASE_URL,
     DEVICE_ENDPOINT,
+    HTTP_USER_AGENT,
     SIGNATURE_ENDPOINT,
 )
 
@@ -45,28 +47,26 @@ class PhilipsAirplusAPIClient:
         return {
             "Authorization": f"Bearer {self.access_token}",
             "Accept": "application/json",
-            "User-Agent": "homeassistant-philips-airplus/0.1.0"
+            "User-Agent": HTTP_USER_AGENT,
         }
 
     async def _fetch_json(self, url: str, timeout: int = 20) -> Dict[str, Any]:
         """Fetch JSON from API endpoint."""
         session = self._get_session()
         headers = self._get_headers()
-        
+
         try:
             async with session.get(
-                url,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=timeout)
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
                 if response.status != 200:
                     text = await response.text()
                     raise PhilipsAirplusAPIError(f"HTTP {response.status}: {text}")
-                
+
                 data = await response.json()
                 _LOGGER.debug("API response from %s: %s", url, data)
                 return data
-                
+
         except aiohttp.ClientError as ex:
             raise PhilipsAirplusAPIError(f"Network error: {ex}") from ex
         except json.JSONDecodeError as ex:
@@ -77,7 +77,7 @@ class PhilipsAirplusAPIClient:
         try:
             data = await self._fetch_json(DEVICE_ENDPOINT)
             devices = []
-            
+
             if isinstance(data, dict):
                 if isinstance(data.get("devices"), list):
                     devices = data["devices"]
@@ -85,17 +85,17 @@ class PhilipsAirplusAPIClient:
                     # Fallback: locate any list with uuid entries
                     for key, value in data.items():
                         if isinstance(value, list) and any(
-                            isinstance(item, dict) and item.get("uuid") 
+                            isinstance(item, dict) and item.get("uuid")
                             for item in value
                         ):
                             devices = value
                             break
             elif isinstance(data, list):
                 devices = data
-            
+
             _LOGGER.debug("Found %d devices", len(devices))
             return devices
-            
+
         except PhilipsAirplusAPIError:
             raise
         except Exception as ex:
@@ -106,13 +106,13 @@ class PhilipsAirplusAPIClient:
         try:
             data = await self._fetch_json(SIGNATURE_ENDPOINT)
             signature = data.get("signature")
-            
+
             if not signature:
                 raise PhilipsAirplusAPIError("Signature missing in response")
-            
+
             _LOGGER.debug("Successfully fetched MQTT signature")
             return signature
-            
+
         except PhilipsAirplusAPIError:
             raise
         except Exception as ex:
@@ -124,7 +124,7 @@ class PhilipsAirplusAPIClient:
             user_endpoint = f"{API_BASE_URL}/da/user/self"
             data = await self._fetch_json(user_endpoint)
             return data
-            
+
         except PhilipsAirplusAPIError:
             raise
         except Exception as ex:
@@ -143,28 +143,20 @@ class PhilipsAirplusDevice:
 
     def _extract_uuid(self) -> str:
         """Extract device UUID."""
-        return (
-            self._data.get("uuid") or 
-            self._data.get("id") or 
-            "unknown"
-        )
+        return self._data.get("uuid") or self._data.get("id") or "unknown"
 
     def _extract_name(self) -> str:
         """Extract device name."""
         return (
-            self._data.get("name") or 
-            self._data.get("deviceName") or 
-            self._data.get("friendlyName") or
-            f"Air+ {self._uuid[:8]}"
+            self._data.get("name")
+            or self._data.get("deviceName")
+            or self._data.get("friendlyName")
+            or f"Air+ {self._uuid[:8]}"
         )
 
     def _extract_type(self) -> str:
         """Extract device type."""
-        return (
-            self._data.get("type") or 
-            self._data.get("deviceType") or 
-            "unknown"
-        )
+        return self._data.get("type") or self._data.get("deviceType") or "unknown"
 
     @property
     def uuid(self) -> str:
@@ -199,19 +191,19 @@ def extract_user_id_from_token(token: str) -> Optional[str]:
     """Extract user ID from JWT token."""
     try:
         import base64
-        
-        parts = token.split('.')
+
+        parts = token.split(".")
         if len(parts) < 2:
             return None
-        
+
         # Decode the payload (middle part)
         payload = parts[1]
         # Add padding if needed
-        padding = '=' * (-len(payload) % 4)
+        padding = "=" * (-len(payload) % 4)
         decoded = base64.urlsafe_b64decode(payload + padding)
         payload_data = json.loads(decoded)
-        
-        return payload_data.get('sub')
+
+        return payload_data.get("sub")
     except Exception as ex:
         _LOGGER.debug("Failed to extract user ID from token: %s", ex)
         return None
@@ -221,17 +213,17 @@ def extract_expiration_from_token(token: str) -> Optional[int]:
     """Extract expiration timestamp from JWT token."""
     try:
         import base64
-        
-        parts = token.split('.')
+
+        parts = token.split(".")
         if len(parts) < 2:
             return None
-        
+
         payload = parts[1]
-        padding = '=' * (-len(payload) % 4)
+        padding = "=" * (-len(payload) % 4)
         decoded = base64.urlsafe_b64decode(payload + padding)
         payload_data = json.loads(decoded)
-        
-        return payload_data.get('exp')
+
+        return payload_data.get("exp")
     except Exception as ex:
         _LOGGER.debug("Failed to extract expiration from token: %s", ex)
         return None
@@ -240,31 +232,43 @@ def extract_expiration_from_token(token: str) -> Optional[int]:
 def build_client_id(user_id: str, device_uuid: str) -> str:
     """Build composite client ID for MQTT connection."""
     import re
-    
+
     # Remove da- prefix if present
-    if device_uuid.startswith('da-'):
+    if device_uuid.startswith("da-"):
         device_uuid = device_uuid[3:]
-    
+
     user_id = user_id.strip()
-    
+
     # UUID regex pattern
-    uuid_re = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
-    
+    uuid_re = re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+    )
+
     if uuid_re.match(user_id) and uuid_re.match(device_uuid):
         composite = f"{user_id}_{device_uuid}"
         if len(composite) != 73:
-            _LOGGER.warning("Composite client ID length %s (expected 73): %s", len(composite), composite)
+            _LOGGER.warning(
+                "Composite client ID length %s (expected 73): %s",
+                len(composite),
+                composite,
+            )
         return composite
-    
+
     # Attempt reconstruction if user_id is 32 hex chars
-    hex32_re = re.compile(r'^[0-9a-f]{32}$', re.IGNORECASE)
+    hex32_re = re.compile(r"^[0-9a-f]{32}$", re.IGNORECASE)
     if hex32_re.match(user_id) and uuid_re.match(device_uuid):
         user_id_formatted = f"{user_id[0:8]}-{user_id[8:12]}-{user_id[12:16]}-{user_id[16:20]}-{user_id[20:32]}"
         composite = f"{user_id_formatted}_{device_uuid}"
         if len(composite) != 73:
-            _LOGGER.warning("Reconstructed composite client ID length %s (expected 73): %s", len(composite), composite)
-        _LOGGER.info("Reconstructed composite client ID from 32-hex user ID: %s", composite)
+            _LOGGER.warning(
+                "Reconstructed composite client ID length %s (expected 73): %s",
+                len(composite),
+                composite,
+            )
+        _LOGGER.info(
+            "Reconstructed composite client ID from 32-hex user ID: %s", composite
+        )
         return composite
-    
+
     # Fallback
     return f"client-{device_uuid}"

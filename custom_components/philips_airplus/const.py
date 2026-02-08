@@ -11,6 +11,10 @@ DEVICE_ENDPOINT = f"{API_BASE_URL}/da/user/self/device"
 SIGNATURE_ENDPOINT = f"{API_BASE_URL}/da/user/self/signature"
 USER_SELF_ENDPOINT = f"{API_BASE_URL}/da/user/self"
 
+# HTTP identity
+# Keep a mobile-style user agent to better match official app traffic.
+HTTP_USER_AGENT = "okhttp/4.12.0 (Android 14; Pixel 7)"
+
 # Default OIDC settings (can be overridden by environment variables)
 # Script example issuer path contains a tenant segment like 4_JGZWlP8eQHpEqkvQElolbA
 OIDC_DEFAULT_ISSUER_BASE = "https://cdc.accounts.home.id/oidc/op/v1.0"
@@ -86,7 +90,7 @@ CONF_ENABLE_MQTT = "enable_mqtt"
 # Update intervals
 # Default polling interval (was 30s). Increased to reduce network chatter.
 SCAN_INTERVAL = timedelta(seconds=120)
-TOKEN_REFRESH_BUFFER = timedelta(minutes=5)
+TOKEN_REFRESH_BUFFER = timedelta(minutes=15)
 
 # Error messages
 ERROR_AUTH_FAILED = "Authentication failed"
@@ -101,4 +105,4 @@ REQUIREMENTS = [
 ]
 
 # Component version
-__version__ = "0.1.0"
+__version__ = "0.2.0"
