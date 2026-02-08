@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import logging
+import re
 import secrets
 import ssl
 import time
@@ -91,20 +92,26 @@ class PhilipsAirplusOAuth2Implementation:
         code_verifier = flow_data.get("code_verifier")
         if not code_verifier:
             raise RuntimeError("Code verifier not found for flow")
-        # Sanitize user-provided code (may be full redirect URL or include &state)
+        # Sanitize user input.
+        # Accepted formats:
+        # - raw code: st2.xxxxx.sc3
+        # - full redirect URL: com.philips.air://loginredirect?code=...&state=...
+        # - query-only fragments containing code=...
         raw = code.strip().strip('"').strip("'")
-        if raw.startswith("http://") or raw.startswith("https://"):
-            try:
-                query = raw.split("?", 1)[1]
-            except IndexError:
-                query = raw
-            for part in query.split("&"):
-                if part.startswith("code="):
-                    raw = part.split("=", 1)[1]
-                    break
-        if "&" in raw:
-            raw = raw.split("&")[0]
-        code = raw
+
+        match = re.search(r"(?:^|[?&])code=([^&\s]+)", raw)
+        if match:
+            raw = urllib.parse.unquote(match.group(1))
+        else:
+            # Fall back to handling plain "code=..." or "...&state=..." fragments.
+            if raw.startswith("code="):
+                raw = raw.split("=", 1)[1]
+            if "&" in raw:
+                raw = raw.split("&", 1)[0]
+
+        code = raw.strip()
+        if not code:
+            raise RuntimeError("Authorization code is empty after parsing")
 
         data = {
             "grant_type": "authorization_code",

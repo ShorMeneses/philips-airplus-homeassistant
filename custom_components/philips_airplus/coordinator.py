@@ -114,6 +114,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self._connected = False
         self._last_update: Optional[datetime] = None
         self._last_full_request: Optional[datetime] = None
+        self._reconnect_task: Optional[asyncio.Task] = None
 
     async def _on_token_refresh(self, token_data: Dict[str, Any]) -> None:
         """Handle token refresh events."""
@@ -267,6 +268,9 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         self._connected = connected
         if connected:
             _LOGGER.info("Connected to Philips Air+ device %s", self._device_name)
+            if self._reconnect_task and not self._reconnect_task.done():
+                self._reconnect_task.cancel()
+                self._reconnect_task = None
             # Schedule the async initial status request
             self.hass.async_create_task(self._request_initial_status())
         else:
@@ -274,26 +278,35 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 "Disconnected from Philips Air+ device %s", self._device_name
             )
 
-            # Schedule automatic reconnection attempt after 30 seconds
-            async def _reconnect_later():
-                await asyncio.sleep(30)
-                if not self._connected and self._mqtt_client:
-                    _LOGGER.info(
-                        "Attempting to reconnect MQTT for %s", self._device_name
-                    )
-                    try:
-                        if await self._mqtt_client.async_connect():
-                            _LOGGER.info(
-                                "MQTT reconnection successful for %s", self._device_name
-                            )
-                        else:
-                            _LOGGER.warning(
-                                "MQTT reconnection failed for %s", self._device_name
-                            )
-                    except Exception as ex:
-                        _LOGGER.error("Error during MQTT reconnection: %s", ex)
+            # Schedule a single reconnection attempt task to avoid reconnect storms.
+            if not self._reconnect_task or self._reconnect_task.done():
 
-            self.hass.async_create_task(_reconnect_later())
+                async def _reconnect_later() -> None:
+                    try:
+                        await asyncio.sleep(30)
+                        if not self._connected and self._mqtt_client:
+                            _LOGGER.info(
+                                "Attempting to reconnect MQTT for %s", self._device_name
+                            )
+                            try:
+                                if await self._mqtt_client.async_connect():
+                                    _LOGGER.info(
+                                        "MQTT reconnection successful for %s",
+                                        self._device_name,
+                                    )
+                                else:
+                                    _LOGGER.warning(
+                                        "MQTT reconnection failed for %s",
+                                        self._device_name,
+                                    )
+                            except Exception as ex:
+                                _LOGGER.error("Error during MQTT reconnection: %s", ex)
+                    except asyncio.CancelledError:
+                        return
+                    finally:
+                        self._reconnect_task = None
+
+                self._reconnect_task = self.hass.async_create_task(_reconnect_later())
 
         # Trigger update so 'available' state is refreshed immediately
         self.async_set_updated_data(
@@ -564,6 +577,10 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def async_shutdown(self) -> None:
         """Shutdown coordinator."""
+        if self._reconnect_task and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
+            self._reconnect_task = None
+
         if self._mqtt_client:
             self._mqtt_client.disconnect()
 
