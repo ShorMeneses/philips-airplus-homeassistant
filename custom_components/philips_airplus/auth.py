@@ -1,4 +1,5 @@
 """Authentication module for Philips Air+ integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,6 +7,7 @@ import base64
 import hashlib
 import json
 import logging
+import re
 import secrets
 import ssl
 import time
@@ -20,6 +22,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     AUTH_MODE_OAUTH,
+    HTTP_USER_AGENT,
     OIDC_DEFAULT_ISSUER_BASE,
     OIDC_DEFAULT_REDIRECT_URI,
     OIDC_DEFAULT_SCOPES,
@@ -34,6 +37,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class AuthenticationExpired(Exception):
     """Raised when authentication has expired and reauth is required."""
+
     pass
 
 
@@ -43,7 +47,7 @@ class PhilipsAirplusOAuth2Implementation:
     def __init__(self, hass: HomeAssistant, client_id: Optional[str] = None) -> None:
         self.hass = hass
         self.client_id = client_id
-        self.issuer_base = OIDC_DEFAULT_ISSUER_BASE.rstrip('/')
+        self.issuer_base = OIDC_DEFAULT_ISSUER_BASE.rstrip("/")
         self.tenant_segment = OIDC_DEFAULT_TENANT_SEGMENT
         self.redirect_uri = OIDC_DEFAULT_REDIRECT_URI
         self.scopes = OIDC_DEFAULT_SCOPES
@@ -53,9 +57,11 @@ class PhilipsAirplusOAuth2Implementation:
 
     async def async_generate_authorize_url(self, flow_id: str) -> str:
         code_verifier = secrets.token_urlsafe(32)
-        code_challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode()).digest()
-        ).decode().rstrip("=")
+        code_challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+            .decode()
+            .rstrip("=")
+        )
 
         self.hass.data.setdefault("philips_airplus", {})[f"flow_{flow_id}"] = {
             "code_verifier": code_verifier
@@ -76,7 +82,9 @@ class PhilipsAirplusOAuth2Implementation:
             "scope": self.scopes,
         }
         # Manual urlencode with safe space handling (%20) to mirror script
-        qs = "&".join(f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items())
+        qs = "&".join(
+            f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()
+        )
         return f"{self.authorize_url}?{qs}"
 
     async def async_request_token(self, code: str, flow_id: str) -> dict:
@@ -84,20 +92,26 @@ class PhilipsAirplusOAuth2Implementation:
         code_verifier = flow_data.get("code_verifier")
         if not code_verifier:
             raise RuntimeError("Code verifier not found for flow")
-        # Sanitize user-provided code (may be full redirect URL or include &state)
+        # Sanitize user input.
+        # Accepted formats:
+        # - raw code: st2.xxxxx.sc3
+        # - full redirect URL: com.philips.air://loginredirect?code=...&state=...
+        # - query-only fragments containing code=...
         raw = code.strip().strip('"').strip("'")
-        if raw.startswith("http://") or raw.startswith("https://"):
-            try:
-                query = raw.split("?", 1)[1]
-            except IndexError:
-                query = raw
-            for part in query.split("&"):
-                if part.startswith("code="):
-                    raw = part.split("=", 1)[1]
-                    break
-        if '&' in raw:
-            raw = raw.split('&')[0]
-        code = raw
+
+        match = re.search(r"(?:^|[?&])code=([^&\s]+)", raw)
+        if match:
+            raw = urllib.parse.unquote(match.group(1))
+        else:
+            # Fall back to handling plain "code=..." or "...&state=..." fragments.
+            if raw.startswith("code="):
+                raw = raw.split("=", 1)[1]
+            if "&" in raw:
+                raw = raw.split("&", 1)[0]
+
+        code = raw.strip()
+        if not code:
+            raise RuntimeError("Authorization code is empty after parsing")
 
         data = {
             "grant_type": "authorization_code",
@@ -106,12 +120,16 @@ class PhilipsAirplusOAuth2Implementation:
             "client_id": self.client_id,
             "code_verifier": code_verifier,
         }
-        
+
         session = async_get_clientsession(self.hass)
         async with session.post(
             self.token_url,
             data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": HTTP_USER_AGENT,
+                "Accept": "application/json",
+            },
         ) as response:
             if response.status != 200:
                 text = await response.text()
@@ -125,16 +143,22 @@ class PhilipsAirplusOAuth2Implementation:
             "refresh_token": refresh_token,
             "client_id": self.client_id,
         }
-        
+
         session = async_get_clientsession(self.hass)
         async with session.post(
             self.token_url,
             data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": HTTP_USER_AGENT,
+                "Accept": "application/json",
+            },
         ) as response:
             if response.status != 200:
                 text = await response.text()
-                raise RuntimeError(f"Refresh token request failed: {response.status} - {text}")
+                raise RuntimeError(
+                    f"Refresh token request failed: {response.status} - {text}"
+                )
             return await response.json()
 
 
@@ -164,14 +188,14 @@ class PhilipsAirplusAuth:
         """Initialize authentication and fetch user details."""
         if not self.access_token:
             return False
-            
+
         try:
             # Fetch user ID
             self.user_id = await self._fetch_user_id()
-            
+
             # Fetch signature
             self.signature = await self._fetch_signature()
-            
+
             return True
         except Exception as ex:
             _LOGGER.error("Auth initialization failed: %s", ex)
@@ -201,57 +225,79 @@ class PhilipsAirplusAuth:
             return False
 
         try:
-            impl = PhilipsAirplusOAuth2Implementation(self.hass, client_id=self._client_id)
+            impl = PhilipsAirplusOAuth2Implementation(
+                self.hass, client_id=self._client_id
+            )
             token_data = await impl.async_refresh_token(self.refresh_token)
-            
-            self.access_token = token_data.get("access_token") or token_data.get("accessToken")
-            new_refresh = token_data.get("refresh_token") or token_data.get("refreshToken")
+
+            self.access_token = token_data.get("access_token") or token_data.get(
+                "accessToken"
+            )
+            new_refresh = token_data.get("refresh_token") or token_data.get(
+                "refreshToken"
+            )
             if new_refresh:
                 self.refresh_token = new_refresh
-            
+
             # Check for 'exp' (timestamp) first, then 'expires_in' (duration)
             exp = token_data.get("exp")
             expires_in = token_data.get("expires_in")
-            
+
             if exp:
                 self.expires_at = datetime.fromtimestamp(int(exp))
-                _LOGGER.debug("Token refreshed, expires at (from exp): %s", self.expires_at)
+                _LOGGER.debug(
+                    "Token refreshed, expires at (from exp): %s", self.expires_at
+                )
             elif expires_in:
                 self.expires_at = datetime.now() + timedelta(seconds=int(expires_in))
-                _LOGGER.debug("Token refreshed, expires at (from expires_in): %s", self.expires_at)
-            
+                _LOGGER.debug(
+                    "Token refreshed, expires at (from expires_in): %s", self.expires_at
+                )
+
             # After refreshing token, fetch new signature
             try:
                 self.signature = await self._fetch_signature()
                 _LOGGER.debug("Signature refreshed after token refresh")
             except Exception as sig_ex:
-                _LOGGER.warning("Failed to refresh signature after token refresh: %s", sig_ex)
+                _LOGGER.warning(
+                    "Failed to refresh signature after token refresh: %s", sig_ex
+                )
                 # Continue anyway - signature refresh is not critical for token refresh success
-                
+
             _LOGGER.info("Successfully refreshed access token")
-            
+
             # Notify callback if registered
             if self._token_callback:
                 try:
-                    await self._token_callback({
-                        "access_token": self.access_token,
-                        "refresh_token": self.refresh_token,
-                        "expires_at": self.expires_at.timestamp() if self.expires_at else None,
-                        "client_id": self._client_id
-                    })
+                    await self._token_callback(
+                        {
+                            "access_token": self.access_token,
+                            "refresh_token": self.refresh_token,
+                            "expires_at": self.expires_at.timestamp()
+                            if self.expires_at
+                            else None,
+                            "client_id": self._client_id,
+                        }
+                    )
                 except Exception as cb_ex:
                     _LOGGER.error("Failed to execute token callback: %s", cb_ex)
-            
+
             return True
         except RuntimeError as ex:
             error_msg = str(ex)
             # Check if refresh token is revoked/expired (400 with invalid_grant or 401)
-            if ("400" in error_msg and "invalid_grant" in error_msg) or "401" in error_msg:
-                _LOGGER.error("Refresh token has expired or been revoked. Triggering re-authentication.")
+            if (
+                "400" in error_msg and "invalid_grant" in error_msg
+            ) or "401" in error_msg:
+                _LOGGER.error(
+                    "Refresh token has expired or been revoked. Triggering re-authentication."
+                )
                 # Clear refresh token to prevent further attempts
                 self.refresh_token = None
                 # Raise exception to trigger HA's reauth flow
-                raise AuthenticationExpired("Token refresh failed - reauthentication required") from ex
+                raise AuthenticationExpired(
+                    "Token refresh failed - reauthentication required"
+                ) from ex
             else:
                 _LOGGER.error("Failed to refresh token: %s", ex)
             return False
@@ -261,9 +307,13 @@ class PhilipsAirplusAuth:
 
     async def _fetch_user_id(self) -> str:
         """Fetch user ID from API."""
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "User-Agent": HTTP_USER_AGENT,
+            "Accept": "application/json",
+        }
         session = async_get_clientsession(self.hass)
-        
+
         async with session.get(USER_SELF_ENDPOINT, headers=headers) as response:
             if response.status != 200:
                 raise RuntimeError(f"Failed to fetch user ID: {response.status}")
@@ -272,9 +322,13 @@ class PhilipsAirplusAuth:
 
     async def _fetch_signature(self) -> str:
         """Fetch signature from API."""
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "User-Agent": HTTP_USER_AGENT,
+            "Accept": "application/json",
+        }
         session = async_get_clientsession(self.hass)
-        
+
         async with session.get(SIGNATURE_ENDPOINT, headers=headers) as response:
             if response.status != 200:
                 raise RuntimeError(f"Failed to fetch signature: {response.status}")
