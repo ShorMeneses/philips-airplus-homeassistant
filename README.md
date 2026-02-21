@@ -7,7 +7,16 @@ This custom integration allows you to control your Philips Air+ AC0650/10 air pu
 - **Fan Control**: Control fan speed (Auto, Sleep, Turbo)
 - **Power Control**: Turn the air purifier on and off
 - **Filter Monitoring**: Monitor filter life for both replace and clean filters
+- **Maintenance Resets**: Reset clean/replace filter timers via buttons or services
 - **Real-time Updates**: Receive real-time status updates via MQTT
+
+## Services
+
+This integration registers two Home Assistant services under the `philips_airplus` domain:
+
+- `philips_airplus.reset_filter_clean`: replicates the official app's "Filter cleaned % reset"
+- `philips_airplus.reset_filter_replace`: replicates the official app's "New/replace filter reset"
+
 
 ## Supported Devices
 

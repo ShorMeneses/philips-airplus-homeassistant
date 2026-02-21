@@ -14,6 +14,15 @@ models:
     protocol:
       transport: mqtt
       topic_template: "da_ctrl/{device_id}/to_ncp"
+      # MQTT port names used by the official app/device protocol
+      ports:
+        control: "Control"
+        status: "Status"
+        filter_read: "filtRd"
+        filter_write: "filtWr"
+      # Maintenance reset actions captured from the official Android app:
+      # - Clean-filter reset: setPort -> portName=filtWr -> properties { D0520D: 720 }
+      # - Replace-filter reset: setPort -> portName=filtWr -> properties { D0540E: 4800 }
     properties:
       fan_speed: "D0310C"
       mode: "D0310C"
@@ -22,5 +31,8 @@ models:
       filter_replace_remaining: "D0540E"
       filter_clean_nominal: "D05207"
       filter_clean_remaining: "D0520D"
+      # Aliases for maintenance reset (raw IDs are the same as the remaining-hour properties)
+      filter_clean_reset_raw: "D0520D"
+      filter_replace_reset_raw: "D0540E"
       device_model: "ctn"
       device_brand: "D01S04"

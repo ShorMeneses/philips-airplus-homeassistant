@@ -45,9 +45,14 @@ FAN_SPEED_MAX = 18
 
 
 PORT_FILTER_READ = "filtRd"
+PORT_FILTER_WRITE = "filtWr"
 PORT_STATUS = "Status"
 PORT_CONTROL = "Control"
 PORT_CONFIG = "Config"
+
+# Raw property IDs (as used by the official app)
+PROP_FILTER_CLEAN_RESET_RAW = "D0520D"
+PROP_FILTER_REPLACE_RESET_RAW = "D0540E"
 
 # Preset modes
 PRESET_MODE_AUTO = "auto"

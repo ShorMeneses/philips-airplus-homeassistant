@@ -567,6 +567,20 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             power_on, raw_speed_key=raw_speed_key, raw_power_key=raw_power_key
         )
 
+    async def reset_filter_clean(self) -> bool:
+        """Reset clean-filter maintenance timer."""
+        if not self._mqtt_client or not self._mqtt_client.is_connected():
+            return False
+
+        return self._mqtt_client.reset_filter_clean()
+
+    async def reset_filter_replace(self) -> bool:
+        """Reset replace-filter maintenance timer."""
+        if not self._mqtt_client or not self._mqtt_client.is_connected():
+            return False
+
+        return self._mqtt_client.reset_filter_replace()
+
     async def async_request_refresh(self) -> None:
         """Request refresh of device data."""
         if self._mqtt_client and self._mqtt_client.is_connected():
