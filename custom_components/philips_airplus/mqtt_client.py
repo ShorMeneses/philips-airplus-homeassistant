@@ -21,7 +21,11 @@ from .const import (
     MQTT_PATH,
     MQTT_PORT,
     PORT_CONTROL,
+    PORT_FILTER_READ,
+    PORT_FILTER_WRITE,
     PORT_STATUS,
+    PROP_FILTER_CLEAN_RESET_RAW,
+    PROP_FILTER_REPLACE_RESET_RAW,
     PROP_FAN_SPEED,
     PROP_MODE,
     TOPIC_CONTROL_TEMPLATE,
@@ -366,6 +370,60 @@ class PhilipsAirplusMQTTClient:
         
         return success
 
+    def reset_filter_clean(self) -> bool:
+        """Reset clean-filter maintenance timer (matches official app MQTT publish)."""
+        if not self._connected:
+            _LOGGER.error("MQTT not connected")
+            return False
+
+        payload = self._build_command_payload(
+            'setPort',
+            PORT_FILTER_WRITE,
+            {PROP_FILTER_CLEAN_RESET_RAW: 720},
+        )
+
+        _LOGGER.debug("Resetting clean-filter maintenance timer")
+        success = self._publish(payload, qos=1)
+
+        # Best-effort refresh to update HA state quickly
+        try:
+            self.request_port_status(PORT_FILTER_READ)
+        except Exception:
+            pass
+        try:
+            self.request_port_status(PORT_STATUS)
+        except Exception:
+            pass
+
+        return success
+
+    def reset_filter_replace(self) -> bool:
+        """Reset replace-filter maintenance timer (matches official app MQTT publish)."""
+        if not self._connected:
+            _LOGGER.error("MQTT not connected")
+            return False
+
+        payload = self._build_command_payload(
+            'setPort',
+            PORT_FILTER_WRITE,
+            {PROP_FILTER_REPLACE_RESET_RAW: 4800},
+        )
+
+        _LOGGER.debug("Resetting replace-filter maintenance timer")
+        success = self._publish(payload, qos=1)
+
+        # Best-effort refresh to update HA state quickly
+        try:
+            self.request_port_status(PORT_FILTER_READ)
+        except Exception:
+            pass
+        try:
+            self.request_port_status(PORT_STATUS)
+        except Exception:
+            pass
+
+        return success
+
     def request_port_status(self, port_name: str) -> bool:
         """Request status for a specific port."""
         if not self._connected:
@@ -406,7 +464,7 @@ class PhilipsAirplusMQTTClient:
         _LOGGER.debug("Requesting shadow get")
         return self._publish('{}', topic=shadow_topic)
 
-    def _publish(self, payload: str, topic: Optional[str] = None) -> bool:
+    def _publish(self, payload: str, topic: Optional[str] = None, qos: int = 0) -> bool:
         """Publish message to MQTT broker."""
         if not self._client or not self._connected:
             _LOGGER.error("MQTT client not connected")
@@ -414,7 +472,7 @@ class PhilipsAirplusMQTTClient:
 
         try:
             publish_topic = topic or self.outbound_topic
-            result = self._client.publish(publish_topic, payload, qos=0)
+            result = self._client.publish(publish_topic, payload, qos=qos)
             
             if getattr(result, 'rc', None) == mqtt.MQTT_ERR_SUCCESS:
                 _LOGGER.debug("Published to %s: %s", publish_topic, payload)

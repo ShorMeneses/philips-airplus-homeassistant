@@ -1,7 +1,7 @@
 {
   "domain": "philips_airplus",
   "name": "Philips Air+",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "documentation": "https://github.com/ShorMeneses/philips-airplus-homeassistant",
   "issue_tracker": "https://github.com/ShorMeneses/philips-airplus-homeassistant/issues",
   "dependencies": [],
