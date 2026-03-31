@@ -69,6 +69,7 @@ PROP_FILTER_CLEAN_NOMINAL = "filter_clean_nominal"
 PROP_FILTER_CLEAN_REMAINING = "filter_clean_remaining"
 PROP_FILTER_REPLACE_NOMINAL = "filter_replace_nominal"
 PROP_FILTER_REPLACE_REMAINING = "filter_replace_remaining"
+PROP_PM25 = "pm25"
 PROP_SESSION_OWNER = "owner"
 
 

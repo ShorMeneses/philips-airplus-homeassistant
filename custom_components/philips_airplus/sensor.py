@@ -8,9 +8,11 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     PERCENTAGE,
     UnitOfTime,
 )
@@ -23,6 +25,7 @@ from .const import (
     DOMAIN,
     PROP_FILTER_CLEAN_REMAINING,
     PROP_FILTER_REPLACE_REMAINING,
+    PROP_PM25,
 )
 from .coordinator import PhilipsAirplusDataCoordinator
 
@@ -30,6 +33,15 @@ _LOGGER = logging.getLogger(__name__)
 
 # Sensor descriptions
 SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
+    # Air quality
+    SensorEntityDescription(
+        key="pm25",
+        name="PM2.5",
+        device_class=SensorDeviceClass.PM25,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        icon="mdi:molecule",
+    ),
     # Filter sensors
     SensorEntityDescription(
         key="filter_replace_percentage",
@@ -116,6 +128,17 @@ class PhilipsAirplusSensor(CoordinatorEntity, SensorEntity):
         """Return the native value of the sensor."""
         key = self.entity_description.key
         
+        if key == "pm25":
+            if not self.coordinator.data:
+                return None
+            device_state = self.coordinator.data.get("device_state", {})
+            raw_key = self.coordinator._model_config.get("properties", {}).get(
+                PROP_PM25
+            )
+            if raw_key:
+                return device_state.get(raw_key)
+            return None
+
         if key.startswith("filter_"):
             # Filter data from filter_info
             if self.coordinator.data:
