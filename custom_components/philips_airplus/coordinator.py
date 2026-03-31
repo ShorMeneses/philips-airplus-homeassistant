@@ -38,6 +38,7 @@ from .const import (
     PROP_FILTER_REPLACE_NOMINAL,
     PROP_FILTER_REPLACE_REMAINING,
     PROP_MODE,
+    PROP_PM25,
     PROP_POWER_FLAG,
     SCAN_INTERVAL,
     TOKEN_REFRESH_BUFFER,
@@ -378,6 +379,10 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             mode_value = properties[prop_mode]
             mode_name = self._get_mode_name(mode_value)
             _LOGGER.debug("Mode updated: %s (%s)", mode_name, mode_value)
+
+        prop_pm25 = self._model_config.get("properties", {}).get(PROP_PM25)
+        if prop_pm25 and prop_pm25 in properties:
+            _LOGGER.debug("PM2.5 updated: %s µg/m³", properties[prop_pm25])
 
         # Trigger coordinator update so entities refresh state in HA
         self.async_set_updated_data(
