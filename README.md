@@ -1,6 +1,6 @@
 # Philips Air+ Home Assistant Integration
 
-This custom integration allows you to control your Philips Air+ AC0650/10 air purifier through Home Assistant. It communicates with the Philips/Versuni cloud service using the same protocol as the official mobile app.
+This custom integration allows you to control your Philips Air+ air purifier through Home Assistant. It communicates with the Philips/Versuni cloud service using the same protocol as the official mobile app.
 
 ## Features
 
@@ -9,6 +9,8 @@ This custom integration allows you to control your Philips Air+ AC0650/10 air pu
 - **Filter Monitoring**: Monitor filter life for both replace and clean filters
 - **Maintenance Resets**: Reset clean/replace filter timers via buttons or services
 - **Real-time Updates**: Receive real-time status updates via MQTT
+- **Air Quality Sensors**: PM2.5 concentration and allergen index (AC0651/10)
+- **Standby Monitor**: Toggle sensor standby mode (AC0651/10)
 
 ## Services
 
@@ -20,8 +22,12 @@ This integration registers two Home Assistant services under the `philips_airplu
 
 ## Supported Devices
 
-- Philips Air+ AC0650/10 (tested)
-- Other Air+ models very unlikely to work!! (Most likely could be easily ported)
+| Model | Fan | Filter Monitoring | Air Quality | Standby Monitor |
+|-------|-----|-------------------|-------------|-----------------|
+| AC0650/10 | ✅ | ✅ | — | — |
+| AC0651/10 | ✅ | ✅ | ✅ PM2.5, Allergen Index | ✅ |
+
+Other Air+ models sharing the same MQTT protocol may work but are untested.
 
 ## Installation
 
@@ -70,7 +76,7 @@ This integration is based on reverse-engineering the Philips Air+ mobile app pro
 
 ## Limitations
 
-- Only tested with AC0650/10 model
+- Tested with AC0650/10 and AC0651/10 models
 - Requires internet connectivity (cloud-dependent)
 
 ## License
