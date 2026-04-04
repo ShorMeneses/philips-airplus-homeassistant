@@ -11,8 +11,6 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
-
 from .const import DOMAIN, CONF_ENABLE_MQTT
 from . import config_flow  # needed so HA can build the options flow
 from .coordinator import PhilipsAirplusDataCoordinator
@@ -145,13 +143,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.debug("Entity registry check failed: %s; proceeding with setup.", exc)
 
     coordinator = PhilipsAirplusDataCoordinator(hass, entry)
-    
-    try:
-        await coordinator.async_setup()
-        await coordinator.async_config_entry_first_refresh()
-    except Exception as ex:
-        raise ConfigEntryNotReady(f"Unable to connect to Philips Air+ device: {ex}") from ex
-    
+
+    # async_config_entry_first_refresh calls _async_setup() internally (via
+    # DataUpdateCoordinator.__wrap_async_setup), then performs the first data
+    # refresh.  It raises ConfigEntryNotReady on connection failure and
+    # ConfigEntryAuthFailed on permanent auth failure — both handled by HA.
+    await coordinator.async_config_entry_first_refresh()
+
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     # Register domain services once (not per entry)

@@ -65,7 +65,13 @@ models:
       device_model: "ctn"
       device_brand: "D01S04"
       # Air quality sensors (identified from MQTT Status port on AC0651/10)
-      pm25: "D03221"           # PM2.5 concentration (µg/m³)
-      allergen_index: "D03120" # Allergen index
+      pm25: "D03221"            # PM2.5 concentration (µg/m³)
+      allergen_index: "D03120"  # Allergen index
       standby_monitor: "D03134" # Sensor standby monitor (diagnostic)
-      diag_D0312C: "D0312C"   # Unknown diagnostic property (always 4 on AC0651/10)
+      diag_D0312C: "D0312C"    # Unknown diagnostic property (always 4 on AC0651/10)
+    # Sensor keys to expose as HA entities (must match MODEL_SENSOR_DESCRIPTIONS in sensor.py)
+    sensors:
+      - pm25
+      - allergen_index
+      - standby_monitor
+      - diag_D0312C

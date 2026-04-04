@@ -17,6 +17,7 @@ from .api import PhilipsAirplusAPIClient, PhilipsAirplusDevice, build_client_id
 from .auth import PhilipsAirplusAuth, AuthenticationExpired
 from .const import (
     AUTH_MODE_OAUTH,
+    DOMAIN,
     CONF_ACCESS_TOKEN,
     CONF_AUTH_MODE,
     CONF_CLIENT_ID,
@@ -59,6 +60,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=entry.title,
             update_interval=SCAN_INTERVAL,
         )
@@ -174,8 +176,16 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             # Load models asynchronously (fixes blocking I/O warning)
             await self._model_manager.async_load_models()
 
-            # Load default model config (will be updated when we get model from device)
-            self._model_config = self._model_manager.get_model_config("AC0650/10")
+            # Load model config — use a previously identified model if available (survives
+            # coordinator reloads), otherwise fall back to the default AC0650/10.
+            _domain_data = self.hass.data.get(DOMAIN, {})
+            _key = f"identified_model_{self._device_uuid}"
+            cached_model = _domain_data.get(_key)
+            self._model_config = self._model_manager.get_model_config(
+                cached_model or "AC0650/10"
+            )
+            if cached_model:
+                _LOGGER.debug("Restored cached model config: %s", cached_model)
 
             # Ensure access token is valid (or refreshed) before any auth-dependent API calls.
             if self._auth.expires_at:
@@ -397,6 +407,11 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.debug("Device model reported: %s", model)
             # Update model config if it changed
             self._model_config = self._model_manager.get_model_config(model)
+            # Cache the identified model in hass.data so future coordinator instances
+            # (e.g. after a config entry reload) can use it immediately.
+            self.hass.data.setdefault(DOMAIN, {})[
+                f"identified_model_{self._device_uuid}"
+            ] = model
             # Re-publish current state so sensors re-evaluate with the new model config
             self.async_set_updated_data(
                 {
@@ -614,6 +629,3 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         if self._api_client:
             await self._api_client.close()
 
-    async def async_setup(self) -> None:
-        """Set up the coordinator."""
-        await self._async_setup()
