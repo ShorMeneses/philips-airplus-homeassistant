@@ -43,6 +43,7 @@ async def async_setup_entry(
             return
         switch_keys: list[str] = coordinator._model_config.get("switches", [])
         if not switch_keys:
+            _switches_added = True
             return
         _switches_added = True
         entities = []

@@ -109,6 +109,7 @@ async def async_setup_entry(
             return
         sensor_keys: list[str] = coordinator._model_config.get("sensors", [])
         if not sensor_keys:
+            _model_sensors_added = True
             return
         _model_sensors_added = True
         entities = []
