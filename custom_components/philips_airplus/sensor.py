@@ -79,12 +79,6 @@ MODEL_SENSOR_DESCRIPTIONS: dict[str, SensorEntityDescription] = {
         name="Allergen Index",
         icon="mdi:flower-pollen",
     ),
-    "standby_monitor": SensorEntityDescription(
-        key="standby_monitor",
-        name="Sensor Standby Monitor",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        icon="mdi:eye-check-outline",
-    ),
     "diag_D0312C": SensorEntityDescription(
         key="diag_D0312C",
         name="Diagnostic D0312C",

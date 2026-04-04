@@ -539,6 +539,18 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             "last_update": self._last_update,
         }
 
+    async def set_property(self, prop_key: str, value: Any) -> bool:
+        """Set a device property by model-config key (e.g. 'standby_monitor')."""
+        if not self._mqtt_client or not self._mqtt_client.is_connected():
+            return False
+
+        raw_key = self._model_config.get("properties", {}).get(prop_key)
+        if not raw_key:
+            _LOGGER.error("No raw key found for property '%s'", prop_key)
+            return False
+
+        return self._mqtt_client.set_property(raw_key, value)
+
     async def set_fan_speed(self, speed: int) -> bool:
         """Set fan speed."""
         if not self._mqtt_client or not self._mqtt_client.is_connected():

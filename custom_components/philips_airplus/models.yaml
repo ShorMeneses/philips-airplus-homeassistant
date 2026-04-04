@@ -73,5 +73,7 @@ models:
     sensors:
       - pm25
       - allergen_index
-      - standby_monitor
       - diag_D0312C
+    # Switch keys to expose as HA entities (must match MODEL_SWITCH_DESCRIPTIONS in switch.py)
+    switches:
+      - standby_monitor

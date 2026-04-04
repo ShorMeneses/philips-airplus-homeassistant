@@ -370,6 +370,28 @@ class PhilipsAirplusMQTTClient:
         
         return success
 
+    def set_property(self, raw_key: str, value: Any) -> bool:
+        """Set a single device property via the Control port."""
+        if not self._connected:
+            _LOGGER.error("MQTT not connected")
+            return False
+
+        payload = self._build_command_payload(
+            'setPort',
+            PORT_CONTROL,
+            {raw_key: value},
+        )
+
+        _LOGGER.debug("Setting property %s to %s", raw_key, value)
+        res = self._publish(payload)
+
+        try:
+            self.request_port_status(PORT_STATUS)
+        except Exception:
+            pass
+
+        return res
+
     def reset_filter_clean(self) -> bool:
         """Reset clean-filter maintenance timer (matches official app MQTT publish)."""
         if not self._connected:
