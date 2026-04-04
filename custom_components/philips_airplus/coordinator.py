@@ -397,6 +397,16 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.debug("Device model reported: %s", model)
             # Update model config if it changed
             self._model_config = self._model_manager.get_model_config(model)
+            # Re-publish current state so sensors re-evaluate with the new model config
+            self.async_set_updated_data(
+                {
+                    "device_state": self._device_state,
+                    "filter_data": self._filter_data,
+                    "filter_info": self._get_filter_info() or {},
+                    "connected": self._connected,
+                    "last_update": self._last_update,
+                }
+            )
 
     def _process_filter_update(self, properties: Dict[str, Any]) -> None:
         """Process filter update."""

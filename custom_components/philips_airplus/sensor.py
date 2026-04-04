@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     PERCENTAGE,
     UnitOfTime,
 )
@@ -29,6 +30,14 @@ from .coordinator import PhilipsAirplusDataCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 # Sensor descriptions
+# Direct raw-ID mapping for device_state sensors (bypasses model-config timing)
+DEVICE_STATE_PROPERTY_MAP: dict[str, str] = {
+    "pm25":           "D03221",
+    "allergen_index": "D03120",
+    "standby_monitor": "D03134",
+    "diag_D0312C":    "D0312C",
+}
+
 SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     # Filter sensors
     SensorEntityDescription(
@@ -62,6 +71,31 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.HOURS,
         icon="mdi:air-filter",
+    ),
+    # Air quality sensors (AC0651/10 and compatible models)
+    SensorEntityDescription(
+        key="pm25",
+        name="PM2.5",
+        device_class=SensorDeviceClass.PM25,
+        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        icon="mdi:air-filter",
+    ),
+    SensorEntityDescription(
+        key="allergen_index",
+        name="Allergen Index",
+        icon="mdi:flower-pollen",
+    ),
+    SensorEntityDescription(
+        key="standby_monitor",
+        name="Sensor Standby Monitor",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:eye-check-outline",
+    ),
+    SensorEntityDescription(
+        key="diag_D0312C",
+        name="Diagnostic D0312C",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:help-circle-outline",
     ),
 ]
 
@@ -117,11 +151,17 @@ class PhilipsAirplusSensor(CoordinatorEntity, SensorEntity):
         key = self.entity_description.key
         
         if key.startswith("filter_"):
-            # Filter data from filter_info
             if self.coordinator.data:
                 filter_info = self.coordinator.data.get("filter_info", {})
                 return filter_info.get(key.replace("filter_", ""))
-        
+
+        # Direct device_state lookup (raw ID known at sensor level)
+        if key in DEVICE_STATE_PROPERTY_MAP and self.coordinator.data:
+            device_state = self.coordinator.data.get("device_state", {})
+            raw_id = DEVICE_STATE_PROPERTY_MAP[key]
+            if raw_id in device_state:
+                return device_state[raw_id]
+
         return None
 
     def _handle_coordinator_update(self) -> None:
