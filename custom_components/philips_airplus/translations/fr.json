@@ -1,0 +1,97 @@
+{
+  "config": {
+    "step": {
+      "oauth": {
+        "title": "Authentification Philips Air+",
+        "description": "1) Ouvrez cette URL de connexion dans votre navigateur :\n{authorize_url}\n\n2) Ouvrez les DevTools (F12) → onglet Réseau — avant de vous connecter.\n3) Effectuez la connexion Philips et autorisez l'application.\n4) Dans l'onglet Réseau, trouvez la redirection vers `com.philips.air://loginredirect?code=...` et copiez l'URL complète.\n5) Collez-la dans le champ ci-dessous.",
+        "data": {
+          "auth_code": "Code d'autorisation"
+        },
+        "data_description": {
+          "auth_code": "Collez l'URL de redirection ou le code extrait de la console réseau"
+        }
+      },
+      "select_device": {
+        "title": "Sélectionner un appareil",
+        "description": "Choisissez l'appareil Philips Air+ que vous souhaitez contrôler",
+        "data": {
+          "device": "Appareil"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Ré-authentifier Philips Air+",
+        "description": "Votre jeton d'authentification a expiré. Veuillez vous ré-authentifier pour continuer à utiliser votre appareil Philips Air+."
+      }
+    },
+    "error": {
+      "missing_code": "Le code d'autorisation est requis.",
+      "invalid_token": "Jeton d'accès invalide. Veuillez vérifier votre jeton et réessayer.",
+      "no_devices": "Aucun appareil trouvé dans votre compte Philips Air+.",
+      "auth_failed": "Échec de l'authentification. Veuillez réessayer.",
+      "cannot_connect": "Impossible de se connecter au service Philips Air+.",
+      "unknown": "Erreur inattendue lors de l'authentification."
+    },
+    "abort": {
+      "already_configured": "Cet appareil est déjà configuré.",
+      "auth_failed": "Échec de l'authentification.",
+      "reauth_successful": "Ré-authentification réussie."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options Philips Air+",
+        "description": "Appareil : {device_name}\n\nPour se ré-authentifier :\n1) Ouvrez cette URL de connexion dans votre navigateur :\n{authorize_url}\n\n2) Ouvrez les DevTools (F12) → onglet Réseau — avant de vous connecter.\n3) Effectuez la connexion Philips et autorisez l'application.\n4) Trouvez la redirection vers `com.philips.air://loginredirect?code=...` et copiez l'URL complète.\n5) Collez-la dans le champ ci-dessous.\n\nLaissez le champ vide pour conserver les jetons actuels.",
+        "data": {
+          "enable_mqtt": "Activer MQTT",
+          "auth_code": "Code d'autorisation (optionnel)"
+        },
+        "data_description": {
+          "enable_mqtt": "Désactiver pour arrêter l'activité cloud/MQTT de cette intégration",
+          "auth_code": "Collez un nouveau code OAuth pour se ré-authentifier sans supprimer l'intégration"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "filter_replace_percentage": {
+        "name": "Changement de filtre"
+      },
+      "filter_replace_hours_remaining": {
+        "name": "Changement de filtre – heures restantes"
+      },
+      "filter_clean_percentage": {
+        "name": "Nettoyage du filtre"
+      },
+      "filter_clean_hours_remaining": {
+        "name": "Nettoyage du filtre – heures restantes"
+      },
+      "pm25": {
+        "name": "Particules fines PM2.5"
+      },
+      "allergen_index": {
+        "name": "Indice allergènes"
+      },
+      "fan_level": {
+        "name": "Niveau du ventilateur"
+      },
+      "diag_d0312c": {
+        "name": "Diagnostic D0312C"
+      }
+    },
+    "button": {
+      "reset_filter_clean": {
+        "name": "Réinitialiser le compteur de nettoyage"
+      },
+      "reset_filter_replace": {
+        "name": "Réinitialiser le compteur de remplacement"
+      }
+    },
+    "switch": {
+      "standby_monitor": {
+        "name": "Veille du capteur"
+      }
+    }
+  }
+}

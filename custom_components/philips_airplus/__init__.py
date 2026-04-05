@@ -11,8 +11,6 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
-
 from .const import DOMAIN, CONF_ENABLE_MQTT
 from . import config_flow  # needed so HA can build the options flow
 from .coordinator import PhilipsAirplusDataCoordinator
@@ -23,6 +21,7 @@ PLATFORMS: list[Platform] = [
     Platform.FAN,
     Platform.SENSOR,
     Platform.BUTTON,
+    Platform.SWITCH,
 ]
 
 
@@ -125,7 +124,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Integration-level option to disable MQTT entirely
         enable_mqtt = entry.options.get(CONF_ENABLE_MQTT, True)
         if not enable_mqtt:
-            _LOGGER = __import__('logging').getLogger(__name__)
             _LOGGER.info("Config entry %s: enable_mqtt is False; skipping MQTT setup.", entry.entry_id)
             return True
         if entries:
@@ -133,25 +131,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Some HA versions do not export DISABLED_USER; compare against literal 'user'
             all_disabled = all((e.disabled_by is not None and str(e.disabled_by).lower() == 'user') for e in entries)
             if all_disabled:
-                _LOGGER = __import__('logging').getLogger(__name__)
                 _LOGGER.info("All entities for config_entry %s are disabled by user; skipping setup.", entry.entry_id)
                 return True
         else:
             # No entity entries yet; initial setup or entities removed — proceed only if enable_mqtt True
-            _LOGGER = __import__('logging').getLogger(__name__)
             _LOGGER.debug("No registered entities for config_entry %s; proceeding (enable_mqtt=%s).", entry.entry_id, enable_mqtt)
     except Exception as exc:
-        _LOGGER = __import__('logging').getLogger(__name__)
         _LOGGER.debug("Entity registry check failed: %s; proceeding with setup.", exc)
 
     coordinator = PhilipsAirplusDataCoordinator(hass, entry)
-    
-    try:
-        await coordinator.async_setup()
-        await coordinator.async_config_entry_first_refresh()
-    except Exception as ex:
-        raise ConfigEntryNotReady(f"Unable to connect to Philips Air+ device: {ex}") from ex
-    
+
+    # async_config_entry_first_refresh calls _async_setup() internally (via
+    # DataUpdateCoordinator.__wrap_async_setup), then performs the first data
+    # refresh.  It raises ConfigEntryNotReady on connection failure and
+    # ConfigEntryAuthFailed on permanent auth failure — both handled by HA.
+    await coordinator.async_config_entry_first_refresh()
+
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     # Register domain services once (not per entry)

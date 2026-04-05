@@ -13,9 +13,8 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.data_entry_flow import FlowResult
 
-from .auth import PhilipsAirplusAuth
+from .auth import PhilipsAirplusAuth, PhilipsAirplusOAuth2Implementation
 from .api import PhilipsAirplusAPIClient, PhilipsAirplusDevice
-from .auth import PhilipsAirplusOAuth2Implementation
 from .const import (
     AUTH_MODE_OAUTH,
     CONF_AUTH_MODE,
@@ -50,23 +49,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._client_id: Optional[str] = None
         self._oauth_flow_id: Optional[str] = None
         self._oauth_authorize_url: Optional[str] = None
-        self._oauth_instructions: Optional[str] = None
         self._reauth_entry: Optional[config_entries.ConfigEntry] = None
-
-    def _build_oauth_instructions(self, authorize_url: str) -> str:
-        """Build user instructions for manual OAuth code extraction."""
-        return (
-            "1) Open this login URL in your browser:\n"
-            f"{authorize_url}\n\n"
-            "2) Before logging in, open browser DevTools and go to the Network tab.\n"
-            "3) Complete login on the Philips website and authorize the app.\n"
-            "4) In Network requests, find a redirect URL like:\n"
-            "com.philips.air://loginredirect?code=st2.xxxxxxx.sc3&state=xxxx\n"
-            "   On desktop this request can fail to open (no app handler). This is expected.\n"
-            "5) Copy only the value between 'code=' and '&state' (example: st2.xxxxxxx.sc3).\n"
-            "6) Paste that value into the field below.\n"
-            "You can also paste the full redirect URL; the integration will extract code automatically."
-        )
 
     async def async_step_user(
         self, user_input: Optional[Dict[str, Any]] = None
@@ -98,10 +81,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     authorize_url,
                 )
 
-                # Create a fully formatted instructions string and store it on the flow
-                instructions = self._build_oauth_instructions(authorize_url)
                 self._oauth_authorize_url = authorize_url
-                self._oauth_instructions = instructions
 
                 return self.async_show_form(
                     step_id="oauth",
@@ -110,7 +90,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             vol.Required("auth_code"): str,
                         }
                     ),
-                    description_placeholders={"instructions": instructions},
+                    description_placeholders={"authorize_url": authorize_url},
                 )
 
             # When user submits the form with the authorization code
@@ -122,7 +102,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=vol.Schema({vol.Required("auth_code"): str}),
                     errors=errors,
                     description_placeholders={
-                        "instructions": getattr(self, "_oauth_instructions", "")
+                        "authorize_url": getattr(self, "_oauth_authorize_url", "")
                     },
                 )
 
@@ -161,7 +141,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=vol.Schema({vol.Required("auth_code"): str}),
                     errors=errors,
                     description_placeholders={
-                        "instructions": getattr(self, "_oauth_instructions", "")
+                        "authorize_url": getattr(self, "_oauth_authorize_url", "")
                     },
                 )
 
@@ -184,7 +164,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=vol.Schema({vol.Required("auth_code"): str}),
                     errors=errors,
                     description_placeholders={
-                        "instructions": getattr(self, "_oauth_instructions", "")
+                        "authorize_url": getattr(self, "_oauth_authorize_url", "")
                     },
                 )
 
@@ -198,7 +178,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_schema=vol.Schema({vol.Required("auth_code"): str}),
                 errors=errors,
                 description_placeholders={
-                    "instructions": getattr(self, "_oauth_instructions", "")
+                    "authorize_url": getattr(self, "_oauth_authorize_url", "")
                 },
             )
 
@@ -298,7 +278,7 @@ class PhilipsAirplusOptionsFlowHandler(config_entries.OptionsFlow):
             CONF_CLIENT_ID, DEFAULT_CLIENT_ID
         )
         self._oauth_flow_id: Optional[str] = None
-        self._oauth_instructions: Optional[str] = None
+        self._oauth_authorize_url: Optional[str] = None
 
     def _build_init_schema(self, enable_mqtt: bool, auth_code: str = "") -> vol.Schema:
         """Build options form schema."""
@@ -309,20 +289,6 @@ class PhilipsAirplusOptionsFlowHandler(config_entries.OptionsFlow):
             }
         )
 
-    def _build_oauth_instructions(self, authorize_url: str) -> str:
-        """Build options re-auth instructions."""
-        return (
-            "Need to refresh authentication? Use the same manual OAuth code flow:\n\n"
-            "1) Open this login URL in your browser:\n"
-            f"{authorize_url}\n\n"
-            "2) Before login, open DevTools -> Network.\n"
-            "3) Complete Philips login and authorization.\n"
-            "4) Find redirect request: com.philips.air://loginredirect?code=...&state=...\n"
-            "   On desktop this request can fail to open; that is expected.\n"
-            "5) Paste only the code value (or paste full redirect URL).\n\n"
-            "Leave Authorization Code empty to keep current tokens unchanged."
-        )
-
     async def _async_show_init_form(
         self,
         enable_mqtt: bool,
@@ -330,13 +296,12 @@ class PhilipsAirplusOptionsFlowHandler(config_entries.OptionsFlow):
         errors: Optional[Dict[str, str]] = None,
     ) -> FlowResult:
         """Render options form with current placeholders."""
-        if not self._oauth_flow_id or not self._oauth_instructions:
+        if not self._oauth_flow_id or not self._oauth_authorize_url:
             self._oauth_flow_id = secrets.token_urlsafe(8)
             impl = PhilipsAirplusOAuth2Implementation(
                 self.hass, client_id=self._client_id
             )
-            authorize_url = await impl.async_generate_authorize_url(self._oauth_flow_id)
-            self._oauth_instructions = self._build_oauth_instructions(authorize_url)
+            self._oauth_authorize_url = await impl.async_generate_authorize_url(self._oauth_flow_id)
 
         device_name = self._entry.data.get(CONF_DEVICE_NAME, "Unknown")
         return self.async_show_form(
@@ -344,9 +309,8 @@ class PhilipsAirplusOptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=self._build_init_schema(enable_mqtt, auth_code),
             errors=errors or {},
             description_placeholders={
-                "auth_mode": "OAuth",
                 "device_name": device_name,
-                "instructions": self._oauth_instructions,
+                "authorize_url": self._oauth_authorize_url,
             },
         )
 

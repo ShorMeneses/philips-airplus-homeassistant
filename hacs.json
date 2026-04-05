@@ -1,4 +1,5 @@
 {
   "name": "Philips Air+",
-  "render_readme": true
+  "render_readme": true,
+  "icon": "https://raw.githubusercontent.com/ShorMeneses/philips-airplus-homeassistant/master/custom_components/philips_airplus/brand/icon.png"
 }

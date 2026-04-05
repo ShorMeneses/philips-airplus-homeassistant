@@ -1,34 +1,14 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Philips Air+",
-        "description": "Configure your Philips Air+ air purifier",
-        "data": {
-          "auth_mode": "Authentication Method"
-        },
-        "data_description": {
-          "auth_mode": "Choose how you want to authenticate with Philips Air+"
-        }
-      },
       "oauth": {
-        "title": "OAuth Authentication",
-        "description": "{instructions}",
+        "title": "Philips Air+ Authentication",
+        "description": "1) Open this login URL in your browser:\n{authorize_url}\n\n2) Open DevTools (F12) → Network tab — before logging in.\n3) Complete Philips login and authorize the app.\n4) Find the `com.philips.air://loginredirect?code=...` redirect in the Network tab and copy the full URL.\n5) Paste it into the field below.",
         "data": {
           "auth_code": "Authorization Code"
         },
         "data_description": {
           "auth_code": "Paste the code value from the login redirect URL"
-        }
-      },
-      "manual_token": {
-        "title": "Manual Token Entry",
-        "description": "{instructions}",
-        "data": {
-          "access_token": "Access Token"
-        },
-        "data_description": {
-          "access_token": "Paste your Philips Air+ access token here"
         }
       },
       "select_device": {
@@ -37,6 +17,10 @@
         "data": {
           "device": "Device"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Philips Air+",
+        "description": "Your authentication token has expired. Please re-authenticate to continue using your Philips Air+ device."
       }
     },
     "error": {
@@ -49,14 +33,15 @@
     },
     "abort": {
       "already_configured": "This device is already configured.",
-      "auth_failed": "Authentication failed."
+      "auth_failed": "Authentication failed.",
+      "reauth_successful": "Re-authentication successful."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Philips Air+ Options",
-        "description": "Authentication Mode: {auth_mode}\nDevice: {device_name}\n\n{instructions}",
+        "description": "Device: {device_name}\n\nTo re-authenticate:\n1) Open this login URL in your browser:\n{authorize_url}\n\n2) Open DevTools (F12) → Network tab — before logging in.\n3) Complete Philips login and authorize the app.\n4) Find the `com.philips.air://loginredirect?code=...` redirect and copy the full URL.\n5) Paste it into the field below.\n\nLeave the field empty to keep current tokens unchanged.",
         "data": {
           "enable_mqtt": "Enable MQTT",
           "auth_code": "Authorization Code (optional)"
@@ -65,6 +50,47 @@
           "enable_mqtt": "Disable to stop cloud/MQTT activity for this integration",
           "auth_code": "Paste a fresh OAuth code to re-authenticate without removing the integration"
         }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "filter_replace_percentage": {
+        "name": "Filter Replacement"
+      },
+      "filter_replace_hours_remaining": {
+        "name": "Filter Replacement – Hours Remaining"
+      },
+      "filter_clean_percentage": {
+        "name": "Filter Cleaning"
+      },
+      "filter_clean_hours_remaining": {
+        "name": "Filter Cleaning – Hours Remaining"
+      },
+      "pm25": {
+        "name": "PM2.5"
+      },
+      "allergen_index": {
+        "name": "Allergen Index"
+      },
+      "fan_level": {
+        "name": "Fan Level"
+      },
+      "diag_d0312c": {
+        "name": "Diagnostic D0312C"
+      }
+    },
+    "button": {
+      "reset_filter_clean": {
+        "name": "Reset Filter Cleaning Timer"
+      },
+      "reset_filter_replace": {
+        "name": "Reset Filter Replacement Timer"
+      }
+    },
+    "switch": {
+      "standby_monitor": {
+        "name": "Sensor Standby Monitor"
       }
     }
   }

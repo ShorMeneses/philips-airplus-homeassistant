@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import urllib.request
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -118,19 +117,6 @@ class PhilipsAirplusAPIClient:
         except Exception as ex:
             raise PhilipsAirplusAPIError(f"Failed to fetch signature: {ex}") from ex
 
-    async def get_user_info(self) -> Dict[str, Any]:
-        """Get user information."""
-        try:
-            user_endpoint = f"{API_BASE_URL}/da/user/self"
-            data = await self._fetch_json(user_endpoint)
-            return data
-
-        except PhilipsAirplusAPIError:
-            raise
-        except Exception as ex:
-            raise PhilipsAirplusAPIError(f"Failed to get user info: {ex}") from ex
-
-
 class PhilipsAirplusDevice:
     """Representation of a Philips Air+ device."""
 
@@ -185,48 +171,6 @@ class PhilipsAirplusDevice:
     def __repr__(self) -> str:
         """Representation."""
         return f"PhilipsAirplusDevice(uuid={self.uuid!r}, name={self.name!r}, type={self.type!r})"
-
-
-def extract_user_id_from_token(token: str) -> Optional[str]:
-    """Extract user ID from JWT token."""
-    try:
-        import base64
-
-        parts = token.split(".")
-        if len(parts) < 2:
-            return None
-
-        # Decode the payload (middle part)
-        payload = parts[1]
-        # Add padding if needed
-        padding = "=" * (-len(payload) % 4)
-        decoded = base64.urlsafe_b64decode(payload + padding)
-        payload_data = json.loads(decoded)
-
-        return payload_data.get("sub")
-    except Exception as ex:
-        _LOGGER.debug("Failed to extract user ID from token: %s", ex)
-        return None
-
-
-def extract_expiration_from_token(token: str) -> Optional[int]:
-    """Extract expiration timestamp from JWT token."""
-    try:
-        import base64
-
-        parts = token.split(".")
-        if len(parts) < 2:
-            return None
-
-        payload = parts[1]
-        padding = "=" * (-len(payload) % 4)
-        decoded = base64.urlsafe_b64decode(payload + padding)
-        payload_data = json.loads(decoded)
-
-        return payload_data.get("exp")
-    except Exception as ex:
-        _LOGGER.debug("Failed to extract expiration from token: %s", ex)
-        return None
 
 
 def build_client_id(user_id: str, device_uuid: str) -> str:
