@@ -299,6 +299,25 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                                 "Attempting to reconnect MQTT for %s", self._device_name
                             )
                             try:
+                                # Refresh token before reconnecting — it may have
+                                # expired during the disconnection window, which would
+                                # cause the broker to immediately reject the connection
+                                # (rc=7) even after a successful TCP handshake.
+                                try:
+                                    token_valid = await self._auth.ensure_access_token()
+                                    if token_valid and self._mqtt_client.access_token != self._auth.access_token:
+                                        _LOGGER.info("Token refreshed before reconnect, updating MQTT credentials")
+                                        self._mqtt_client.access_token = self._auth.access_token
+                                        self._mqtt_client.signature = self._auth.signature
+                                except AuthenticationExpired:
+                                    _LOGGER.error(
+                                        "Token expired and cannot be refreshed for %s — re-authentication required",
+                                        self._device_name,
+                                    )
+                                    raise ConfigEntryAuthFailed(
+                                        "Authentication expired, please re-authenticate"
+                                    )
+
                                 if await self._mqtt_client.async_connect():
                                     _LOGGER.info(
                                         "MQTT reconnection successful for %s",
