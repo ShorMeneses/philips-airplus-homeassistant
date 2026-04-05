@@ -72,7 +72,7 @@ Notes:
 
 ## Development
 
-This integration is based on reverse-engineering the Philips Air+ mobile app protocol.
+This integration is based on reverse-engineering the Philips Air+ mobile app protocol. This repository is a fork of https://github.com/ShorMeneses/philips-airplus-homeassistant, it has been modified to additionally support AC0651/10 air purifiers. The code has been created by Antrophic's Claude Code, as I do not like "whitespace aware languages" and I am not willing to adapt to them... 
 
 ## Limitations
 
