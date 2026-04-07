@@ -87,7 +87,6 @@ class PhilipsAirplusFan(CoordinatorEntity, FanEntity):
             return True
         if power is not None and int(power) == 0:
             return False
-            
         speed = self._get_device_property(PROP_FAN_SPEED)
         if speed is None:
             return False
