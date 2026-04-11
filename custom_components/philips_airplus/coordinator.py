@@ -288,21 +288,24 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 "Disconnected from Philips Air+ device %s", self._device_name
             )
 
-            # Schedule a single reconnection attempt task to avoid reconnect storms.
+            # Schedule a reconnection task with retry loop and exponential backoff.
             if not self._reconnect_task or self._reconnect_task.done():
 
                 async def _reconnect_later() -> None:
+                    delay = 30
+                    max_delay = 300
                     try:
-                        await asyncio.sleep(30)
-                        if not self._connected and self._mqtt_client:
+                        while not self._connected and self._mqtt_client:
+                            await asyncio.sleep(delay)
+                            if self._connected:
+                                break
                             _LOGGER.info(
-                                "Attempting to reconnect MQTT for %s", self._device_name
+                                "Attempting to reconnect MQTT for %s (next retry in %ss if failed)",
+                                self._device_name, min(delay * 2, max_delay),
                             )
                             try:
                                 # Refresh token before reconnecting — it may have
-                                # expired during the disconnection window, which would
-                                # cause the broker to immediately reject the connection
-                                # (rc=7) even after a successful TCP handshake.
+                                # expired during the disconnection window.
                                 try:
                                     token_valid = await self._auth.ensure_access_token()
                                     if token_valid and self._mqtt_client.access_token != self._auth.access_token:
@@ -323,13 +326,18 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                                         "MQTT reconnection successful for %s",
                                         self._device_name,
                                     )
+                                    break
                                 else:
                                     _LOGGER.warning(
-                                        "MQTT reconnection failed for %s",
-                                        self._device_name,
+                                        "MQTT reconnection failed for %s, retrying in %ss",
+                                        self._device_name, min(delay * 2, max_delay),
                                     )
+                                    delay = min(delay * 2, max_delay)
+                            except ConfigEntryAuthFailed:
+                                raise
                             except Exception as ex:
-                                _LOGGER.error("Error during MQTT reconnection: %s", ex)
+                                _LOGGER.error("Error during MQTT reconnection for %s: %s", self._device_name, ex)
+                                delay = min(delay * 2, max_delay)
                     except asyncio.CancelledError:
                         return
                     finally:
