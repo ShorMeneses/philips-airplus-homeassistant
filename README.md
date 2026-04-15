@@ -55,7 +55,7 @@ You need a Philips Air+ account with your device already set up in the official 
 3. Before logging in, open browser DevTools and switch to the **Network** tab.
 4. Complete login and authorization on the Philips website.
 5. In Network requests, find the redirect request that looks like:
-   `com.philips.air://loginredirect?code=st2.xxxxxxx.sc3&state=xxxx`
+   `com.philips.air://loginredirect?code=st2.xxxxxxx.sc3&state=xxxx` (It HAS to be this exact URL. There are other URLs with a similar value which will not work.)
 6. Copy only the `code` value (the part between `code=` and `&state`). In this example, copy only: `st2.xxxxxxx.sc3`
 7. Paste that value into Home Assistant as the Authorization Code.
 
@@ -63,6 +63,7 @@ Notes:
 - On desktop browsers, the `com.philips.air://...` request may fail to open because there is no app handler. This is expected; you only need the URL from Network.
 - You can also paste the full redirect URL; the integration will extract the `code` value automatically.
 - If the token expires later, open **Integration -> Configure** and paste a new authorization code in the optional re-auth field (no need to remove/re-add the integration).
+- Some Browsers won't show the correct request (LibreWolf). Microsoft Edge seems to be working reliably.
 
 ## Development
 
