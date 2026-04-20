@@ -174,7 +174,12 @@ class PhilipsAirplusDevice:
 
 
 def build_client_id(user_id: str, device_uuid: str) -> str:
-    """Build composite client ID for MQTT connection."""
+    """Build composite client ID for MQTT connection.
+
+    Appends an `_ha` suffix so HA does not share the client ID with the
+    Philips Air+ app (same account + device → same base ID → AWS IoT kicks
+    whichever client connected first).
+    """
     import re
 
     # Remove da- prefix if present
@@ -189,30 +194,17 @@ def build_client_id(user_id: str, device_uuid: str) -> str:
     )
 
     if uuid_re.match(user_id) and uuid_re.match(device_uuid):
-        composite = f"{user_id}_{device_uuid}"
-        if len(composite) != 73:
-            _LOGGER.warning(
-                "Composite client ID length %s (expected 73): %s",
-                len(composite),
-                composite,
-            )
-        return composite
+        return f"{user_id}_{device_uuid}_ha"
 
     # Attempt reconstruction if user_id is 32 hex chars
     hex32_re = re.compile(r"^[0-9a-f]{32}$", re.IGNORECASE)
     if hex32_re.match(user_id) and uuid_re.match(device_uuid):
         user_id_formatted = f"{user_id[0:8]}-{user_id[8:12]}-{user_id[12:16]}-{user_id[16:20]}-{user_id[20:32]}"
-        composite = f"{user_id_formatted}_{device_uuid}"
-        if len(composite) != 73:
-            _LOGGER.warning(
-                "Reconstructed composite client ID length %s (expected 73): %s",
-                len(composite),
-                composite,
-            )
+        composite = f"{user_id_formatted}_{device_uuid}_ha"
         _LOGGER.info(
             "Reconstructed composite client ID from 32-hex user ID: %s", composite
         )
         return composite
 
     # Fallback
-    return f"client-{device_uuid}"
+    return f"client-{device_uuid}_ha"
