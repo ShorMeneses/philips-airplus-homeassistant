@@ -24,10 +24,6 @@ from .const import (
     PORT_FILTER_READ,
     PORT_FILTER_WRITE,
     PORT_STATUS,
-    PROP_FILTER_CLEAN_RESET_RAW,
-    PROP_FILTER_REPLACE_RESET_RAW,
-    PROP_FAN_SPEED,
-    PROP_MODE,
     TOPIC_CONTROL_TEMPLATE,
     TOPIC_STATUS_TEMPLATE,
 )
@@ -67,11 +63,23 @@ class PhilipsAirplusMQTTClient:
         self._lock = threading.Lock()
         self._message_callback: Optional[Callable[[Dict[str, Any]], None]] = None
         self._connection_callback: Optional[Callable[[bool], None]] = None
-        self._last_nonzero_speed: int = 8
         self._refreshing_credentials: bool = False  # Flag to maintain availability during credential refresh
         
         self.outbound_topic = TOPIC_CONTROL_TEMPLATE.format(device_id=self.device_id)
         self.inbound_topic = TOPIC_STATUS_TEMPLATE.format(device_id=self.device_id)
+
+        # Port names — defaults from const.py, overridable per model via configure_ports()
+        self._port_status = PORT_STATUS
+        self._port_control = PORT_CONTROL
+        self._port_filter_read = PORT_FILTER_READ
+        self._port_filter_write = PORT_FILTER_WRITE
+
+    def configure_ports(self, ports: Dict[str, str]) -> None:
+        """Update port names from model config."""
+        self._port_status = ports.get("status", PORT_STATUS)
+        self._port_control = ports.get("control", PORT_CONTROL)
+        self._port_filter_read = ports.get("filter_read", PORT_FILTER_READ)
+        self._port_filter_write = ports.get("filter_write", PORT_FILTER_WRITE)
 
     def set_message_callback(self, callback: Callable[[Dict[str, Any]], None]) -> None:
         """Set callback for incoming messages."""
@@ -304,33 +312,7 @@ class PhilipsAirplusMQTTClient:
         }
         return json.dumps(payload, separators=(',', ':'))
 
-    def set_fan_speed(self, speed: int, raw_key: str = PROP_FAN_SPEED) -> bool:
-        """Set fan speed using raw property key."""
-        if not self._connected:
-            _LOGGER.error("MQTT not connected")
-            return False
-        
-        payload = self._build_command_payload(
-            'setPort',
-            PORT_CONTROL,
-            {raw_key: speed}
-        )
-        
-        _LOGGER.debug("Setting fan speed to %s using key %s", speed, raw_key)
-        
-        if speed > 0:
-            self._last_nonzero_speed = speed
-        
-        res = self._publish(payload)
-        
-        try:
-            self.request_port_status(PORT_STATUS)
-        except Exception:
-            pass
-        
-        return res
-
-    def set_mode(self, mode: int, raw_key: str = PROP_MODE) -> bool:
+    def set_mode(self, mode: int, raw_key: str) -> bool:
         """Set device mode using raw property key."""
         if not self._connected:
             _LOGGER.error("MQTT not connected")
@@ -338,7 +320,7 @@ class PhilipsAirplusMQTTClient:
         
         payload = self._build_command_payload(
             'setPort',
-            PORT_CONTROL,
+            self._port_control,
             {raw_key: mode}
         )
         
@@ -346,79 +328,86 @@ class PhilipsAirplusMQTTClient:
         success = self._publish(payload)
         
         try:
-            self.request_port_status(PORT_STATUS)
+            self.request_port_status(self._port_status)
         except Exception:
             pass
         
         return success
 
-    def set_power(self, power_on: bool, raw_speed_key: str = PROP_FAN_SPEED, raw_power_key: Optional[str] = None) -> bool:
-        """Set power state."""
+    def set_power(self, power_on: bool) -> bool:
+        """Set power state via AWS IoT shadow update."""
         if not self._connected:
             _LOGGER.error("MQTT not connected")
-            return False    
+            return False
 
-        power_val = 1 if power_on == True else 0
-        desired = {"state": {"desired": {"powerOn": True if power_val == 1 else False}}}
+        desired = {"state": {"desired": {"powerOn": power_on}}}
         shadow_payload = json.dumps(desired, separators=(',', ':'))
-    
         success = self._publish(shadow_payload, topic=f"$aws/things/{self.device_id}/shadow/update")
-        
+
         if success:
-            # Force immediate status update to reflect change in HA
-            self.request_port_status(PORT_STATUS)
-        
+            self.request_port_status(self._port_status)
+
         return success
 
-    def reset_filter_clean(self) -> bool:
-        """Reset clean-filter maintenance timer (matches official app MQTT publish)."""
+    def set_property(self, raw_key: str, value: Any) -> bool:
+        """Set a single device property via the Control port."""
         if not self._connected:
             _LOGGER.error("MQTT not connected")
             return False
 
         payload = self._build_command_payload(
             'setPort',
-            PORT_FILTER_WRITE,
-            {PROP_FILTER_CLEAN_RESET_RAW: 720},
+            self._port_control,
+            {raw_key: value},
         )
 
-        _LOGGER.debug("Resetting clean-filter maintenance timer")
-        success = self._publish(payload, qos=1)
+        _LOGGER.debug("Setting property %s to %s", raw_key, value)
+        res = self._publish(payload)
 
-        # Best-effort refresh to update HA state quickly
         try:
-            self.request_port_status(PORT_FILTER_READ)
+            self.request_port_status(self._port_status)
         except Exception:
             pass
+
+        return res
+
+    def reset_filter_clean(self, raw_key: str, reset_value: int) -> bool:
+        """Reset clean-filter maintenance timer.
+
+        raw_key and reset_value come from the model config (filter_clean_reset_raw /
+        filter_clean_reset_value), matching the official app's MQTT publish pattern.
+        """
+        if not self._connected:
+            _LOGGER.error("MQTT not connected")
+            return False
+
+        payload = self._build_command_payload('setPort', self._port_filter_write, {raw_key: reset_value})
+        _LOGGER.debug("Resetting clean-filter timer: %s = %s", raw_key, reset_value)
+        success = self._publish(payload, qos=1)
+
         try:
-            self.request_port_status(PORT_STATUS)
+            self.request_port_status(self._port_filter_read)
         except Exception:
             pass
 
         return success
 
-    def reset_filter_replace(self) -> bool:
-        """Reset replace-filter maintenance timer (matches official app MQTT publish)."""
+    def reset_filter_replace(self, raw_key: str, reset_value: int) -> bool:
+        """Reset replace-filter maintenance timer.
+
+        raw_key and reset_value come from the model config (filter_replace_reset_raw /
+        filter_replace_reset_value), matching the official app's MQTT publish pattern.
+        """
         if not self._connected:
             _LOGGER.error("MQTT not connected")
             return False
 
-        payload = self._build_command_payload(
-            'setPort',
-            PORT_FILTER_WRITE,
-            {PROP_FILTER_REPLACE_RESET_RAW: 4800},
-        )
-
-        _LOGGER.debug("Resetting replace-filter maintenance timer")
+        payload = self._build_command_payload('setPort', self._port_filter_write, {raw_key: reset_value})
+        _LOGGER.debug("Resetting replace-filter timer: %s = %s", raw_key, reset_value)
         success = self._publish(payload, qos=1)
 
-        # Best-effort refresh to update HA state quickly
         try:
-            self.request_port_status(PORT_FILTER_READ)
-        except Exception:
-            pass
-        try:
-            self.request_port_status(PORT_STATUS)
+            self.request_port_status(self._port_filter_read)
         except Exception:
             pass
 
@@ -437,21 +426,6 @@ class PhilipsAirplusMQTTClient:
         )
         
         _LOGGER.debug("Requesting status for port %s", port_name)
-        return self._publish(payload)
-
-    def request_all_ports_status(self) -> bool:
-        """Request status for all ports."""
-        if not self._connected:
-            _LOGGER.error("MQTT not connected")
-            return False
-
-        payload = self._build_command_payload(
-            'getAllPorts',
-            '',
-            {}
-        )
-        
-        _LOGGER.debug("Requesting status for all ports")
         return self._publish(payload)
 
     def request_shadow_get(self) -> bool:

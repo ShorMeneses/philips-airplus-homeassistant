@@ -31,17 +31,10 @@ OIDC_DEFAULT_SCOPES = (
 MQTT_HOST = "ats.prod.eu-da.iot.versuni.com"
 MQTT_PORT = 443
 MQTT_PATH = "/mqtt"
-KEEPALIVE = 4
+KEEPALIVE = 60
 
 # Authentication
 AUTH_MODE_OAUTH = "oauth"
-# Authentication
-AUTH_MODE_OAUTH = "oauth"
-
-
-# Fan speed ranges
-FAN_SPEED_MIN = 1
-FAN_SPEED_MAX = 18
 
 
 PORT_FILTER_READ = "filtRd"
@@ -50,18 +43,10 @@ PORT_STATUS = "Status"
 PORT_CONTROL = "Control"
 PORT_CONFIG = "Config"
 
-# Raw property IDs (as used by the official app)
-PROP_FILTER_CLEAN_RESET_RAW = "D0520D"
-PROP_FILTER_REPLACE_RESET_RAW = "D0540E"
-
-# Preset modes
-PRESET_MODE_AUTO = "auto"
-PRESET_MODE_SLEEP = "sleep"
-PRESET_MODE_TURBO = "turbo"
+# Fallback preset mode name when device reports an unknown mode value
 PRESET_MODE_MANUAL = "manual"
 
-# Properties
-PROP_FAN_SPEED = "fan_speed"
+# Property keys used to look up raw MQTT IDs in models.yaml
 PROP_MODE = "mode"
 PROP_POWER_FLAG = "power"
 
@@ -72,12 +57,9 @@ PROP_FILTER_REPLACE_REMAINING = "filter_replace_remaining"
 PROP_PM25 = "pm25"
 PROP_SESSION_OWNER = "owner"
 
-
 # MQTT topics
 TOPIC_CONTROL_TEMPLATE = "da_ctrl/{device_id}/to_ncp"
 TOPIC_STATUS_TEMPLATE = "da_ctrl/{device_id}/from_ncp"
-TOPIC_SHADOW_UPDATE_TEMPLATE = "$aws/things/{device_id}/shadow/update"
-TOPIC_SHADOW_GET_TEMPLATE = "$aws/things/{device_id}/shadow/get"
 
 # Configuration keys
 CONF_ACCESS_TOKEN = "access_token"
@@ -97,18 +79,3 @@ CONF_ENABLE_MQTT = "enable_mqtt"
 # Default polling interval (was 30s). Increased to reduce network chatter.
 SCAN_INTERVAL = timedelta(seconds=120)
 TOKEN_REFRESH_BUFFER = timedelta(minutes=15)
-
-# Error messages
-ERROR_AUTH_FAILED = "Authentication failed"
-ERROR_CONNECTION_FAILED = "Connection failed"
-ERROR_DEVICE_NOT_FOUND = "Device not found"
-ERROR_INVALID_TOKEN = "Invalid token"
-ERROR_NETWORK_ERROR = "Network error"
-
-# Component requirements
-REQUIREMENTS = [
-    "paho-mqtt>=1.6.0",
-]
-
-# Component version
-__version__ = "0.2.0"

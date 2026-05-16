@@ -13,10 +13,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import PhilipsAirplusAPIClient, PhilipsAirplusDevice, build_client_id
+from .api import PhilipsAirplusAPIClient, build_client_id
 from .auth import PhilipsAirplusAuth, AuthenticationExpired
 from .const import (
     AUTH_MODE_OAUTH,
+    DOMAIN,
     CONF_ACCESS_TOKEN,
     CONF_AUTH_MODE,
     CONF_CLIENT_ID,
@@ -29,22 +30,13 @@ from .const import (
     PORT_CONFIG,
     PORT_FILTER_READ,
     PORT_STATUS,
+    # Used as fallback defaults in _resolve_ports()
     PRESET_MODE_MANUAL,
-    PRESET_MODE_SLEEP,
-    PRESET_MODE_TURBO,
-    PROP_FAN_SPEED,
-    PROP_FILTER_CLEAN_NOMINAL,
-    PROP_FILTER_CLEAN_REMAINING,
-    PROP_FILTER_REPLACE_NOMINAL,
-    PROP_FILTER_REPLACE_REMAINING,
     PROP_MODE,
     PROP_PM25,
     PROP_POWER_FLAG,
     SCAN_INTERVAL,
     TOKEN_REFRESH_BUFFER,
-    TOPIC_CONTROL_TEMPLATE,
-    TOPIC_SHADOW_UPDATE_TEMPLATE,
-    TOPIC_STATUS_TEMPLATE,
 )
 from .mqtt_client import PhilipsAirplusMQTTClient
 from .model_manager import PhilipsAirplusModelManager
@@ -60,6 +52,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=entry.title,
             update_interval=SCAN_INTERVAL,
         )
@@ -110,6 +103,11 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         # Model config will be loaded after async_load_models() is called
         # Defaulting to empty dict until then
         self._model_config: Dict[str, Any] = {}
+        self._ports: Dict[str, str] = {
+            "status": PORT_STATUS,
+            "config": PORT_CONFIG,
+            "filter_read": PORT_FILTER_READ,
+        }
 
         # Connection status
         self._connected = False
@@ -175,8 +173,19 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             # Load models asynchronously (fixes blocking I/O warning)
             await self._model_manager.async_load_models()
 
-            # Load default model config (will be updated when we get model from device)
-            self._model_config = self._model_manager.get_model_config("AC0650/10")
+            # Load model config — use a previously identified model if available (survives
+            # coordinator reloads). Without a cache the config stays empty; entities are
+            # registered lazily once the device reports its model via the Config port.
+            _domain_data = self.hass.data.get(DOMAIN, {})
+            _key = f"identified_model_{self._device_uuid}"
+            cached_model = _domain_data.get(_key)
+            if cached_model:
+                self._model_config = self._model_manager.get_model_config(cached_model)
+                _LOGGER.debug("Restored cached model config: %s", cached_model)
+            else:
+                self._model_config = {}
+                _LOGGER.debug("No cached model; entities will be registered after device identification via MQTT")
+            self._ports = self._resolve_ports()
 
             # Ensure access token is valid (or refreshed) before any auth-dependent API calls.
             if self._auth.expires_at:
@@ -247,16 +256,16 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             minutes=5
         ):
             self._last_full_request = now
-            self._mqtt_client.request_port_status(PORT_STATUS)
+            self._mqtt_client.request_port_status(self._ports["status"])
             await asyncio.sleep(0.1)
-            self._mqtt_client.request_port_status(PORT_CONFIG)
+            self._mqtt_client.request_port_status(self._ports["config"])
             await asyncio.sleep(0.1)
-            self._mqtt_client.request_port_status(PORT_FILTER_READ)
+            self._mqtt_client.request_port_status(self._ports["filter_read"])
             await asyncio.sleep(0.1)
             self._mqtt_client.request_shadow_get()
         else:
             # Only request Status port for lightweight refresh
-            self._mqtt_client.request_port_status(PORT_STATUS)
+            self._mqtt_client.request_port_status(self._ports["status"])
 
     def _on_mqtt_connection(self, connected: bool) -> None:
         """Handle MQTT connection status changes."""
@@ -279,29 +288,56 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 "Disconnected from Philips Air+ device %s", self._device_name
             )
 
-            # Schedule a single reconnection attempt task to avoid reconnect storms.
+            # Schedule a reconnection task with retry loop and exponential backoff.
             if not self._reconnect_task or self._reconnect_task.done():
 
                 async def _reconnect_later() -> None:
+                    delay = 30
+                    max_delay = 300
                     try:
-                        await asyncio.sleep(30)
-                        if not self._connected and self._mqtt_client:
+                        while not self._connected and self._mqtt_client:
+                            await asyncio.sleep(delay)
+                            if self._connected:
+                                break
                             _LOGGER.info(
-                                "Attempting to reconnect MQTT for %s", self._device_name
+                                "Attempting to reconnect MQTT for %s (next retry in %ss if failed)",
+                                self._device_name, min(delay * 2, max_delay),
                             )
                             try:
+                                # Refresh token before reconnecting — it may have
+                                # expired during the disconnection window.
+                                try:
+                                    token_valid = await self._auth.ensure_access_token()
+                                    if token_valid and self._mqtt_client.access_token != self._auth.access_token:
+                                        _LOGGER.info("Token refreshed before reconnect, updating MQTT credentials")
+                                        self._mqtt_client.access_token = self._auth.access_token
+                                        self._mqtt_client.signature = self._auth.signature
+                                except AuthenticationExpired:
+                                    _LOGGER.error(
+                                        "Token expired and cannot be refreshed for %s — re-authentication required",
+                                        self._device_name,
+                                    )
+                                    raise ConfigEntryAuthFailed(
+                                        "Authentication expired, please re-authenticate"
+                                    )
+
                                 if await self._mqtt_client.async_connect():
                                     _LOGGER.info(
                                         "MQTT reconnection successful for %s",
                                         self._device_name,
                                     )
+                                    break
                                 else:
                                     _LOGGER.warning(
-                                        "MQTT reconnection failed for %s",
-                                        self._device_name,
+                                        "MQTT reconnection failed for %s, retrying in %ss",
+                                        self._device_name, min(delay * 2, max_delay),
                                     )
+                                    delay = min(delay * 2, max_delay)
+                            except ConfigEntryAuthFailed:
+                                raise
                             except Exception as ex:
-                                _LOGGER.error("Error during MQTT reconnection: %s", ex)
+                                _LOGGER.error("Error during MQTT reconnection for %s: %s", self._device_name, ex)
+                                delay = min(delay * 2, max_delay)
                     except asyncio.CancelledError:
                         return
                     finally:
@@ -355,11 +391,11 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                     "Message missing portName, attempting to process as status update"
                 )
                 self._process_status_update(properties)
-            elif port_name == PORT_STATUS and properties:
+            elif port_name == self._ports["status"] and properties:
                 self._process_status_update(properties)
-            elif port_name == PORT_CONFIG and properties:
+            elif port_name == self._ports["config"] and properties:
                 self._process_config_update(properties)
-            elif port_name == PORT_FILTER_READ and properties:
+            elif port_name == self._ports["filter_read"] and properties:
                 self._process_filter_update(properties)
 
         except Exception as ex:
@@ -402,6 +438,34 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.debug("Device model reported: %s", model)
             # Update model config if it changed
             self._model_config = self._model_manager.get_model_config(model)
+            # Apply model-specific port names
+            self._ports = self._resolve_ports()
+            if self._mqtt_client:
+                self._mqtt_client.configure_ports(self._model_config.get("ports", {}))
+            # Cache the identified model in hass.data so future coordinator instances
+            # (e.g. after a config entry reload) can use it immediately.
+            self.hass.data.setdefault(DOMAIN, {})[
+                f"identified_model_{self._device_uuid}"
+            ] = model
+            # Re-publish current state so sensors re-evaluate with the new model config
+            self.async_set_updated_data(
+                {
+                    "device_state": self._device_state,
+                    "filter_data": self._filter_data,
+                    "filter_info": self._get_filter_info() or {},
+                    "connected": self._connected,
+                    "last_update": self._last_update,
+                }
+            )
+
+    def _resolve_ports(self) -> Dict[str, str]:
+        """Resolve port names from model config with const.py defaults."""
+        p = self._model_config.get("ports", {})
+        return {
+            "status": p.get("status", PORT_STATUS),
+            "config": p.get("config", PORT_CONFIG),
+            "filter_read": p.get("filter_read", PORT_FILTER_READ),
+        }
 
     def _process_filter_update(self, properties: Dict[str, Any]) -> None:
         """Process filter update."""
@@ -423,11 +487,11 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         )
 
     def _get_mode_name(self, mode_value: int) -> str:
-        """Get mode name from value."""
-        name = self._model_manager.get_mode_name(
-            self._model_config.get("name", "AC0650/10"), mode_value
-        )
-        return name or PRESET_MODE_MANUAL
+        """Get mode name from value using the already-loaded model config."""
+        for name, val in self._model_config.get("modes", {}).items():
+            if val == mode_value:
+                return name
+        return PRESET_MODE_MANUAL
 
     def _get_filter_info(self) -> Optional[Dict[str, Any]]:
         """Get filter information."""
@@ -508,7 +572,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             ) from ex
 
         # Request status update
-        self._mqtt_client.request_port_status(PORT_STATUS)
+        self._mqtt_client.request_port_status(self._ports["status"])
 
         # Return combined data
         return {
@@ -519,18 +583,17 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             "last_update": self._last_update,
         }
 
-    async def set_fan_speed(self, speed: int) -> bool:
-        """Set fan speed."""
+    async def set_property(self, prop_key: str, value: Any) -> bool:
+        """Set a device property by model-config key (e.g. 'standby_monitor')."""
         if not self._mqtt_client or not self._mqtt_client.is_connected():
             return False
 
-        # Get raw key for fan speed
-        raw_key = self._model_config.get("properties", {}).get(PROP_FAN_SPEED)
+        raw_key = self._model_config.get("properties", {}).get(prop_key)
         if not raw_key:
-            _LOGGER.error("No raw key found for fan_speed")
+            _LOGGER.error("No raw key found for property '%s'", prop_key)
             return False
 
-        return self._mqtt_client.set_fan_speed(speed, raw_key=raw_key)
+        return self._mqtt_client.set_property(raw_key, value)
 
     async def set_mode(self, mode: str) -> bool:
         """Set device mode."""
@@ -557,42 +620,31 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         """Set power state."""
         if not self._mqtt_client or not self._mqtt_client.is_connected():
             return False
-
-        # Get raw key for fan speed (fallback)
-        raw_speed_key = self._model_config.get("properties", {}).get(PROP_FAN_SPEED)
-
-        # Get raw key for power flag (preferred)
-        raw_power_key = self._model_config.get("properties", {}).get(PROP_POWER_FLAG)
-
-        if not raw_speed_key and not raw_power_key:
-            _LOGGER.error("No raw keys found for power control")
-            return False
-
-        return self._mqtt_client.set_power(
-            power_on, raw_speed_key=raw_speed_key, raw_power_key=raw_power_key
-        )
+        return self._mqtt_client.set_power(power_on)
 
     async def reset_filter_clean(self) -> bool:
         """Reset clean-filter maintenance timer."""
         if not self._mqtt_client or not self._mqtt_client.is_connected():
             return False
-
-        return self._mqtt_client.reset_filter_clean()
+        props = self._model_config.get("properties", {})
+        raw_key = props.get("filter_clean_reset_raw")
+        reset_value = props.get("filter_clean_reset_value")
+        if not raw_key or reset_value is None:
+            _LOGGER.error("Model config missing filter_clean_reset_raw or filter_clean_reset_value")
+            return False
+        return self._mqtt_client.reset_filter_clean(raw_key, reset_value)
 
     async def reset_filter_replace(self) -> bool:
         """Reset replace-filter maintenance timer."""
         if not self._mqtt_client or not self._mqtt_client.is_connected():
             return False
-
-        return self._mqtt_client.reset_filter_replace()
-
-    async def async_request_refresh(self) -> None:
-        """Request refresh of device data."""
-        if self._mqtt_client and self._mqtt_client.is_connected():
-            # Use throttled status request rather than full multi-port
-            await self._request_initial_status()
-
-        await super().async_request_refresh()
+        props = self._model_config.get("properties", {})
+        raw_key = props.get("filter_replace_reset_raw")
+        reset_value = props.get("filter_replace_reset_value")
+        if not raw_key or reset_value is None:
+            _LOGGER.error("Model config missing filter_replace_reset_raw or filter_replace_reset_value")
+            return False
+        return self._mqtt_client.reset_filter_replace(raw_key, reset_value)
 
     async def async_shutdown(self) -> None:
         """Shutdown coordinator."""
@@ -608,7 +660,3 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
         if self._api_client:
             await self._api_client.close()
-
-    async def async_setup(self) -> None:
-        """Set up the coordinator."""
-        await self._async_setup()

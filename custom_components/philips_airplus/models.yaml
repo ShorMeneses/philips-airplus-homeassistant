@@ -1,8 +1,5 @@
 # Philips Air+ Device Models Configuration
 
-# Default model if none matches
-default: "AC0650/10"
-
 models:
   "AC0650/10":
     name: "Philips Air+ AC0650/10"
@@ -10,19 +7,12 @@ models:
       Auto: 1
       Sleep: 17
       Turbo: 18
-    speeds: [17, 1, 18]  # Ordered by intensity: Sleep (quietest), Auto (medium), Turbo (loudest)
-    protocol:
-      transport: mqtt
-      topic_template: "da_ctrl/{device_id}/to_ncp"
-      # MQTT port names used by the official app/device protocol
-      ports:
-        control: "Control"
-        status: "Status"
-        filter_read: "filtRd"
-        filter_write: "filtWr"
-      # Maintenance reset actions captured from the official Android app:
-      # - Clean-filter reset: setPort -> portName=filtWr -> properties { D0520D: 720 }
-      # - Replace-filter reset: setPort -> portName=filtWr -> properties { D0540E: 4800 }
+    ports:
+      status: "Status"
+      control: "Control"
+      config: "Config"
+      filter_read: "filtRd"
+      filter_write: "filtWr"
     properties:
       fan_speed: "D0310C"
       mode: "D0310C"
@@ -31,9 +21,68 @@ models:
       filter_replace_remaining: "D0540E"
       filter_clean_nominal: "D05207"
       filter_clean_remaining: "D0520D"
-      # Aliases for maintenance reset (raw IDs are the same as the remaining-hour properties)
       filter_clean_reset_raw: "D0520D"
+      filter_clean_reset_value: 720      # hours written back when resetting clean-filter timer
       filter_replace_reset_raw: "D0540E"
+      filter_replace_reset_value: 4800   # hours written back when resetting replace-filter timer
       device_model: "ctn"
       device_brand: "D01S04"
-      pm25: "D03221"
+      pm25: "D03221"            # PM2.5 concentration (µg/m³)
+      fan_level: "D0310D"      # Actual fan speed level (0=off, 1=slow … 18=turbo)
+    sensors:
+      - filter_replace_percentage
+      - filter_replace_hours_remaining
+      - filter_clean_percentage
+      - filter_clean_hours_remaining
+      - pm25
+      - fan_level
+    buttons:
+      - reset_filter_clean
+      - reset_filter_replace
+
+  "AC0651/10":
+    name: "Philips Air+ AC0651/10"
+    modes:
+      Auto: 0
+      Medium: 1
+      Sleep: 17
+      Turbo: 18
+    ports:
+      status: "Status"
+      control: "Control"
+      config: "Config"
+      filter_read: "filtRd"
+      filter_write: "filtWr"
+    properties:
+      fan_speed: "D0310C"
+      mode: "D0310C"
+      power: "D0310D"
+      filter_replace_nominal: "D05408"
+      filter_replace_remaining: "D0540E"
+      filter_clean_nominal: "D05207"
+      filter_clean_remaining: "D0520D"
+      filter_clean_reset_raw: "D0520D"
+      filter_clean_reset_value: 720      # hours written back when resetting clean-filter timer
+      filter_replace_reset_raw: "D0540E"
+      filter_replace_reset_value: 4800   # hours written back when resetting replace-filter timer
+      device_model: "ctn"
+      device_brand: "D01S04"
+      pm25: "D03221"            # PM2.5 concentration (µg/m³)
+      allergen_index: "D03120"  # Allergen index
+      standby_monitor: "D03134" # Sensor standby monitor (diagnostic)
+      diag_D0312C: "D0312C"    # Unknown diagnostic property (always 4 on AC0651/10)
+      fan_level: "D0310D"      # Actual fan speed level (0=off, 1=slow … 18=turbo)
+    sensors:
+      - filter_replace_percentage
+      - filter_replace_hours_remaining
+      - filter_clean_percentage
+      - filter_clean_hours_remaining
+      - pm25
+      - allergen_index
+      - fan_level
+      - diag_D0312C
+    switches:
+      - standby_monitor
+    buttons:
+      - reset_filter_clean
+      - reset_filter_replace
