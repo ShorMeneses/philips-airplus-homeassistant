@@ -25,6 +25,8 @@ Other Air+ models sharing the same MQTT protocol may work but are untested. New 
 
 Before installing this integration, check whether your device is already supported by [kongo09/philips-airpurifier-coap](https://github.com/kongo09/philips-airpurifier-coap). If it is listed there, you may be able to confirm the model and protocol details there first, which makes setup and troubleshooting easier.
 
+Before installing this integration, check whether your device is already supported by [kongo09/philips-airpurifier-coap](https://github.com/kongo09/philips-airpurifier-coap). If it is listed there, you may be able to confirm the model and protocol details there first, which makes setup and troubleshooting easier.
+
 ## Installation
 
 ### via HACS (Recommended)
