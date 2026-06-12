@@ -68,7 +68,7 @@ class PhilipsAirplusMQTTClient:
         self.outbound_topic = TOPIC_CONTROL_TEMPLATE.format(device_id=self.device_id)
         self.inbound_topic = TOPIC_STATUS_TEMPLATE.format(device_id=self.device_id)
 
-        # Port names — defaults from const.py, overridable per model via configure_ports()
+        # Port names (defaults from const.py, overridable per model via configure_ports())
         self._port_status = PORT_STATUS
         self._port_control = PORT_CONTROL
         self._port_filter_read = PORT_FILTER_READ
@@ -149,13 +149,18 @@ class PhilipsAirplusMQTTClient:
             self._last_disconnect_time = time.time()
             self._last_disconnect_rc = rc
             try:
-                client.loop_stop()
-            except Exception:
-                pass
-            try:
                 client.disconnect()
             except Exception:
                 pass
+        # Always stop the network loop and drop our reference to this client,
+        # regardless of rc. Previously rc=0 disconnects left the old client
+        # (and its network thread) alive while a new client was created on
+        # reconnect, so zombie callbacks could corrupt the connection state.
+        try:
+            client.loop_stop()
+        except Exception:
+            pass
+        if self._client is client:
             self._client = None
         self._connected = False
         
@@ -191,7 +196,21 @@ class PhilipsAirplusMQTTClient:
                     time.sleep(wait)
             
             headers = self._build_headers()
-            
+
+            # Tear down any leftover client before creating a fresh one, so we
+            # never have two paho network threads alive at once.
+            old_client = self._client
+            if old_client is not None:
+                try:
+                    old_client.loop_stop()
+                except Exception:
+                    pass
+                try:
+                    old_client.disconnect()
+                except Exception:
+                    pass
+                self._client = None
+
             self._client = mqtt.Client(
                 client_id=self.client_id,
                 transport='websockets',
@@ -481,3 +500,13 @@ class PhilipsAirplusMQTTClient:
             return result
         finally:
             self._refreshing_credentials = False
+            # If the reconnect failed we are now disconnected, but the
+            # disconnect callback was suppressed while _refreshing_credentials
+            # was True. Fire it now so the coordinator knows the connection is
+            # down and starts its reconnect loop; otherwise nothing would ever
+            # attempt to reconnect again (integration dead until reload).
+            if not self._connected and self._connection_callback:
+                try:
+                    self._connection_callback(False)
+                except Exception as cb_ex:
+                    _LOGGER.error("Connection callback failed: %s", cb_ex)

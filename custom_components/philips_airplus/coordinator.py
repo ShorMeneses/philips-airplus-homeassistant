@@ -173,7 +173,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             # Load models asynchronously (fixes blocking I/O warning)
             await self._model_manager.async_load_models()
 
-            # Load model config — use a previously identified model if available (survives
+            # Load model config: use a previously identified model if available (survives
             # coordinator reloads). Without a cache the config stays empty; entities are
             # registered lazily once the device reports its model via the Config port.
             _domain_data = self.hass.data.get(DOMAIN, {})
@@ -304,22 +304,33 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                                 self._device_name, min(delay * 2, max_delay),
                             )
                             try:
-                                # Refresh token before reconnecting — it may have
+                                # Refresh token before reconnecting: it may have
                                 # expired during the disconnection window.
                                 try:
-                                    token_valid = await self._auth.ensure_access_token()
-                                    if token_valid and self._mqtt_client.access_token != self._auth.access_token:
-                                        _LOGGER.info("Token refreshed before reconnect, updating MQTT credentials")
-                                        self._mqtt_client.access_token = self._auth.access_token
-                                        self._mqtt_client.signature = self._auth.signature
+                                    await self._auth.ensure_access_token()
                                 except AuthenticationExpired:
                                     _LOGGER.error(
-                                        "Token expired and cannot be refreshed for %s — re-authentication required",
+                                        "Token expired and cannot be refreshed for %s, re-authentication required",
                                         self._device_name,
                                     )
-                                    raise ConfigEntryAuthFailed(
-                                        "Authentication expired, please re-authenticate"
-                                    )
+                                    # Raising ConfigEntryAuthFailed from a background
+                                    # task does NOT trigger HA's reauth flow, it just
+                                    # kills this task. Start the reauth flow explicitly.
+                                    self.entry.async_start_reauth(self.hass)
+                                    return
+
+                                # The custom-authorizer signature must match the
+                                # current access token, so refresh it before every
+                                # reconnect attempt. A stale signature (e.g. after a
+                                # failed fetch during token refresh) would otherwise
+                                # make every attempt fail until the next token cycle.
+                                await self._auth.refresh_signature()
+                                self._mqtt_client.access_token = (
+                                    self._auth.access_token or ""
+                                )
+                                self._mqtt_client.signature = (
+                                    self._auth.signature or ""
+                                )
 
                                 if await self._mqtt_client.async_connect():
                                     _LOGGER.info(
@@ -542,17 +553,20 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         return filter_info if filter_info else None
 
     async def _async_update_data(self) -> Dict[str, Any]:
-        """Update device data."""
-        if not self._mqtt_client or not self._mqtt_client.is_connected():
-            raise UpdateFailed("MQTT client not connected")
+        """Update device data, recovering the MQTT connection if needed."""
+        if not self._mqtt_client:
+            raise UpdateFailed("MQTT client not initialized")
 
-        # Ensure token is valid before request
+        # Ensure token is valid before any connectivity decisions. This used
+        # to run only when already connected, which meant a disconnected
+        # integration could never refresh its token or recover.
         try:
             token_valid = await self._auth.ensure_access_token()
             if token_valid:
                 # If token was refreshed, update MQTT credentials
                 if (
                     self._mqtt_client
+                    and self._mqtt_client.is_connected()
                     and self._mqtt_client.access_token != self._auth.access_token
                 ):
                     _LOGGER.info("Token refreshed, updating MQTT credentials")
@@ -571,6 +585,15 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 "Authentication expired, please re-authenticate"
             ) from ex
 
+        # Self-healing: if we are disconnected and no reconnect task is
+        # already working on it, attempt a reconnect right now. This turns the
+        # regular poll cycle into a recovery mechanism instead of a dead end.
+        if not self._mqtt_client.is_connected():
+            await self._async_attempt_recovery()
+
+        if not self._mqtt_client.is_connected():
+            raise UpdateFailed("MQTT client not connected")
+
         # Request status update
         self._mqtt_client.request_port_status(self._ports["status"])
 
@@ -582,6 +605,35 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             "connected": self._connected,
             "last_update": self._last_update,
         }
+
+    async def _async_attempt_recovery(self) -> None:
+        """Try to re-establish the MQTT connection from the poll cycle.
+
+        Skips if the background reconnect task is already running, so the two
+        recovery paths never fight each other.
+        """
+        if self._reconnect_task and not self._reconnect_task.done():
+            return
+        if not self._mqtt_client:
+            return
+
+        _LOGGER.info(
+            "MQTT disconnected for %s; attempting recovery", self._device_name
+        )
+        # The custom-authorizer signature must match the current access token,
+        # so always fetch a fresh one before reconnecting. A stale signature
+        # would make every reconnect attempt fail with an auth error.
+        await self._auth.refresh_signature()
+        self._mqtt_client.access_token = self._auth.access_token or ""
+        self._mqtt_client.signature = self._auth.signature or ""
+
+        try:
+            if await self._mqtt_client.async_connect():
+                _LOGGER.info("MQTT recovery successful for %s", self._device_name)
+        except Exception as ex:
+            _LOGGER.warning(
+                "MQTT recovery attempt failed for %s: %s", self._device_name, ex
+            )
 
     async def set_property(self, prop_key: str, value: Any) -> bool:
         """Set a device property by model-config key (e.g. 'standby_monitor')."""
