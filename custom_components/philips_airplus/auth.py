@@ -198,6 +198,23 @@ class PhilipsAirplusAuth:
             _LOGGER.error("Auth initialization failed: %s", ex)
             return False
 
+    async def refresh_signature(self) -> bool:
+        """Fetch a fresh MQTT custom-authorizer signature for the current token.
+
+        The signature sent in the x-amz-customauthorizer-signature header must
+        match the access token presented at connect time, so this should be
+        called before any (re)connect attempt that follows a token refresh.
+        """
+        if not self.access_token:
+            return False
+        try:
+            self.signature = await self._fetch_signature()
+            _LOGGER.debug("Signature refreshed")
+            return True
+        except Exception as ex:
+            _LOGGER.warning("Failed to refresh signature: %s", ex)
+            return False
+
     async def ensure_access_token(self) -> bool:
         """Ensure we have a valid access token, refreshing if necessary."""
         if not self.refresh_token:
@@ -251,15 +268,15 @@ class PhilipsAirplusAuth:
                     "Token refreshed, expires at (from expires_in): %s", self.expires_at
                 )
 
-            # After refreshing token, fetch new signature
-            try:
-                self.signature = await self._fetch_signature()
-                _LOGGER.debug("Signature refreshed after token refresh")
-            except Exception as sig_ex:
+            # After refreshing the token, fetch a matching signature. A stale
+            # signature will cause every subsequent MQTT (re)connect to be
+            # rejected by the custom authorizer, so callers that reconnect
+            # should also call refresh_signature() before connecting.
+            if not await self.refresh_signature():
                 _LOGGER.warning(
-                    "Failed to refresh signature after token refresh: %s", sig_ex
+                    "Signature could not be refreshed after token refresh; "
+                    "it will be retried before the next MQTT reconnect"
                 )
-                # Continue anyway - signature refresh is not critical for token refresh success
 
             _LOGGER.info("Successfully refreshed access token")
 
