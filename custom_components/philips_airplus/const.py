@@ -35,6 +35,21 @@ KEEPALIVE = 60
 
 # Authentication
 AUTH_MODE_OAUTH = "oauth"
+AUTH_MODE_EMAIL_OTP = "email_otp"
+
+# Gigya CDC API (email + OTP authentication)
+GIGYA_API_KEY = "4_JGZWlP8eQHpEqkvQElolbA"
+GIGYA_API_URL = "https://cdc.accounts.home.id"
+GIGYA_OTP_SEND_ENDPOINT = f"{GIGYA_API_URL}/accounts.auth.otp.email.sendCode"
+GIGYA_OTP_LOGIN_ENDPOINT = f"{GIGYA_API_URL}/accounts.auth.otp.email.login"
+GIGYA_SOCIALIZE_GET_IDS = f"{GIGYA_API_URL}/socialize.getIDs"
+
+# OIDC endpoints for the HomeID client (used by email OTP path)
+OIDC_HOMEID_ISSUER = f"https://cdc.accounts.home.id/oidc/op/v1.0/{GIGYA_API_KEY}"
+OIDC_HOMEID_AUTH = f"{OIDC_HOMEID_ISSUER}/authorize"
+OIDC_HOMEID_TOKEN = f"{OIDC_HOMEID_ISSUER}/token"
+OAUTH_CLIENT_ID_HOMEID = "-u6aTznrxp9_9e_0a57CpvEG"
+MOBILE_APP_REDIRECT_URI_HOMEID = "com.philips.ka.oneka.app.prod://oauthredirect"
 
 
 PORT_FILTER_READ = "filtRd"
