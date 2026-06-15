@@ -304,10 +304,16 @@ class PhilipsAirplusMQTTClient:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._blocking_connect)
 
+    def shutdown(self) -> None:
+        """Permanent shutdown — suppress all future callbacks."""
+        self._shutting_down = True
+        self.disconnect()
+
     def disconnect(self) -> None:
         """Disconnect from MQTT broker."""
         with self._lock:
-            self._shutting_down = True
+            if self._shutting_down:
+                return
             if self._client:
                 try:
                     self._client.loop_stop()

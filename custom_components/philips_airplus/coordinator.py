@@ -713,7 +713,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             self._reconnect_task = None
 
         if self._mqtt_client:
-            self._mqtt_client.disconnect()
+            self._mqtt_client.shutdown()
 
         if self._auth:
             await self._auth.close()
