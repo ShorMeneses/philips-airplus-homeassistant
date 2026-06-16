@@ -64,6 +64,7 @@ class PhilipsAirplusMQTTClient:
         self._message_callback: Optional[Callable[[Dict[str, Any]], None]] = None
         self._connection_callback: Optional[Callable[[bool], None]] = None
         self._refreshing_credentials: bool = False  # Flag to maintain availability during credential refresh
+        self._shutting_down: bool = False  # Suppress callbacks during shutdown
         
         self.outbound_topic = TOPIC_CONTROL_TEMPLATE.format(device_id=self.device_id)
         self.inbound_topic = TOPIC_STATUS_TEMPLATE.format(device_id=self.device_id)
@@ -122,16 +123,36 @@ class PhilipsAirplusMQTTClient:
                 self._connection_callback(False)
 
     def _on_message(self, client: mqtt.Client, userdata: Any, msg: MQTTMessage) -> None:
-        """Handle incoming MQTT messages."""
+        """Handle incoming MQTT messages.
+
+        The AWS IoT broker may deliver multiple JSON payloads concatenated
+        in a single WebSocket frame.  Use raw_decode to process every
+        object in sequence instead of dropping the entire batch.
+        """
         try:
             payload = msg.payload.decode('utf-8')
-            message_data = json.loads(payload)
-            
-            _LOGGER.debug("Received message: %s", message_data)
-            
-            if self._message_callback:
-                self._message_callback(message_data)
-                
+            decoder = json.JSONDecoder()
+            idx = 0
+            while idx < len(payload):
+                # Skip leading whitespace between objects
+                while idx < len(payload) and payload[idx] in ' \t\n\r':
+                    idx += 1
+                if idx >= len(payload):
+                    break
+                try:
+                    message_data, end = decoder.raw_decode(payload, idx)
+                except json.JSONDecodeError:
+                    # Single-object fallback for the common case
+                    message_data = json.loads(payload[idx:])
+                    end = len(payload)
+
+                _LOGGER.debug("Received message: %s", message_data)
+
+                if self._message_callback:
+                    self._message_callback(message_data)
+
+                idx = end
+
         except json.JSONDecodeError as ex:
             _LOGGER.error("Failed to decode MQTT message: %s", ex)
         except Exception as ex:
@@ -140,6 +161,8 @@ class PhilipsAirplusMQTTClient:
     def _on_disconnect(self, client: mqtt.Client, userdata: Any, rc: int) -> None:
         """Handle MQTT disconnect events."""
         _LOGGER.debug("Disconnected from MQTT with rc=%s", rc)
+        if self._shutting_down:
+            return
         if rc != 0:
             _LOGGER.warning("MQTT unexpected disconnect rc=%s", rc)
             try:
@@ -171,7 +194,7 @@ class PhilipsAirplusMQTTClient:
     def _blocking_connect(self, timeout: float = 15.0) -> bool:
         """Connect to MQTT broker."""
         with self._lock:
-            if self._connecting:
+            if self._shutting_down or self._connecting:
                 return False
             if self._connected:
                 return True
@@ -281,9 +304,16 @@ class PhilipsAirplusMQTTClient:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._blocking_connect)
 
+    def shutdown(self) -> None:
+        """Permanent shutdown — suppress all future callbacks."""
+        self._shutting_down = True
+        self.disconnect()
+
     def disconnect(self) -> None:
         """Disconnect from MQTT broker."""
         with self._lock:
+            if self._shutting_down:
+                return
             if self._client:
                 try:
                     self._client.loop_stop()

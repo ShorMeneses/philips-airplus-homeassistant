@@ -46,9 +46,23 @@ Before installing this integration, check whether your device is already support
 
 A Philips Air+ account with your device already set up in the official mobile app.
 
-### Authentication: OAuth PKCE Flow
+### Authentication: Email + Verification Code (Recommended)
 
-1. Add the integration in Home Assistant. A login URL will be shown.
+A simpler, no-browser alternative to the OAuth PKCE flow. No DevTools required.
+
+1. Add the integration in Home Assistant and choose **Email + verification code**
+2. Enter the email address associated with your Philips account
+3. Check your inbox for the verification code
+4. Enter the code in Home Assistant
+5. Select your device
+
+Works with both Philips Air+ and Philips HomeID accounts.
+
+### Authentication: OAuth PKCE Flow (Legacy)
+
+For accounts registered via **Philips Air+** only.
+
+1. Add the integration in Home Assistant. Choose **OAuth PKCE**. A login URL will be shown.
 2. Open that URL in your browser.
 3. Before logging in, open browser DevTools and switch to the Network tab.
 4. Complete the login and authorization on the Philips website.
@@ -59,7 +73,7 @@ Notes:
 
 - On desktop browsers, the `com.philips.air://...` request will fail to open. This is expected.
 - You can paste the full redirect URL or just the code value; the integration extracts the code automatically.
-- If the token expires, go to Integration > Configure and paste a new authorization code. No need to remove and re-add the integration.
+- If the token expires, go to Integration > Configure and re-authenticate. No need to remove and re-add the integration.
 
 ## Services
 
@@ -81,6 +95,7 @@ Entities are registered lazily: the integration waits for the device to report i
 Thanks to:
 - @vkostakos 
 - @markusstephany
+- @renaudallard — the email OTP authentication flow is adapted from the [Philips HomeID integration](https://github.com/renaudallard/homeassistant_philips_homeid)
 
 ## License
 

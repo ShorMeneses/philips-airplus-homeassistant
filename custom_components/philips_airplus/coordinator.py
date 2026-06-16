@@ -313,17 +313,9 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                                         "Token expired and cannot be refreshed for %s, re-authentication required",
                                         self._device_name,
                                     )
-                                    # Raising ConfigEntryAuthFailed from a background
-                                    # task does NOT trigger HA's reauth flow, it just
-                                    # kills this task. Start the reauth flow explicitly.
                                     self.entry.async_start_reauth(self.hass)
                                     return
 
-                                # The custom-authorizer signature must match the
-                                # current access token, so refresh it before every
-                                # reconnect attempt. A stale signature (e.g. after a
-                                # failed fetch during token refresh) would otherwise
-                                # make every attempt fail until the next token cycle.
                                 await self._auth.refresh_signature()
                                 self._mqtt_client.access_token = (
                                     self._auth.access_token or ""
@@ -332,18 +324,34 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                                     self._auth.signature or ""
                                 )
 
-                                if await self._mqtt_client.async_connect():
-                                    _LOGGER.info(
-                                        "MQTT reconnection successful for %s",
-                                        self._device_name,
-                                    )
-                                    break
-                                else:
-                                    _LOGGER.warning(
-                                        "MQTT reconnection failed for %s, retrying in %ss",
-                                        self._device_name, min(delay * 2, max_delay),
-                                    )
-                                    delay = min(delay * 2, max_delay)
+                                # Prevent entities from flickering to unavailable
+                                # while the old client is torn down and replaced.
+                                self._mqtt_client._refreshing_credentials = True
+                                try:
+                                    if await self._mqtt_client.async_connect():
+                                        _LOGGER.info(
+                                            "MQTT reconnection successful for %s",
+                                            self._device_name,
+                                        )
+                                        break
+                                    else:
+                                        _LOGGER.warning(
+                                            "MQTT reconnection failed for %s, retrying in %ss",
+                                            self._device_name, min(delay * 2, max_delay),
+                                        )
+                                        delay = min(delay * 2, max_delay)
+                                finally:
+                                    # If the reconnect failed while the flag was set,
+                                    # fire the disconnect callback now. Otherwise the
+                                    # integration stays offline until reload.
+                                    if not self._mqtt_client.is_connected() and self._mqtt_client._connection_callback:
+                                        try:
+                                            self.hass.loop.call_soon_threadsafe(
+                                                self._mqtt_client._connection_callback, False
+                                            )
+                                        except Exception:
+                                            pass
+                                    self._mqtt_client._refreshing_credentials = False
                             except ConfigEntryAuthFailed:
                                 raise
                             except Exception as ex:
@@ -705,7 +713,7 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             self._reconnect_task = None
 
         if self._mqtt_client:
-            self._mqtt_client.disconnect()
+            self._mqtt_client.shutdown()
 
         if self._auth:
             await self._auth.close()

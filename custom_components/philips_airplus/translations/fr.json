@@ -1,6 +1,13 @@
 {
   "config": {
     "step": {
+      "auth_method": {
+        "title": "Méthode d'authentification",
+        "description": "Choisissez comment vous souhaitez vous authentifier avec votre compte Philips.\n\n**OAuth PKCE** — nécessite d'ouvrir un navigateur et d'utiliser l'onglet Réseau des DevTools pour capturer l'URL de redirection. Fonctionne uniquement avec l'app **Philips Air+**.\n\n**Email + code de vérification** — plus simple : entrez votre email, recevez un code, saisissez-le. Fonctionne avec **Philips Air+** et **Philips HomeID**.",
+        "data": {
+          "auth_method": "Méthode d'authentification"
+        }
+      },
       "oauth": {
         "title": "Authentification Philips Air+",
         "description": "1) Ouvrez cette URL de connexion dans votre navigateur :\n{authorize_url}\n\n2) Ouvrez les DevTools (F12) → onglet Réseau — avant de vous connecter.\n3) Effectuez la connexion Philips et autorisez l'application.\n4) Dans l'onglet Réseau, trouvez la redirection vers `com.philips.air://loginredirect?code=...` et copiez l'URL complète.\n5) Collez-la dans le champ ci-dessous.",
@@ -21,14 +28,38 @@
       "reauth_confirm": {
         "title": "Ré-authentifier Philips Air+",
         "description": "Votre jeton d'authentification a expiré. Veuillez vous ré-authentifier pour continuer à utiliser votre appareil Philips Air+."
+      },
+      "email": {
+        "title": "Authentification Philips Air+ par e-mail",
+        "description": "Entrez l'adresse e-mail associée à votre compte Philips. Un code de vérification sera envoyé à cette adresse.",
+        "data": {
+          "email": "Adresse e-mail"
+        }
+      },
+      "email_otp": {
+        "title": "Code de vérification Philips Air+",
+        "description": "Un code de vérification a été envoyé à **{email}**. Vérifiez votre boîte de réception et saisissez le code ci-dessous.",
+        "data": {
+          "otp_code": "Code de vérification"
+        }
+      },
+      "email_otp_options": {
+        "title": "Code de vérification Philips Air+",
+        "description": "Un code de vérification a été envoyé à **{email}**. Vérifiez votre boîte de réception et saisissez le code ci-dessous.",
+        "data": {
+          "otp_code": "Code de vérification"
+        }
       }
     },
     "error": {
       "missing_code": "Le code d'autorisation est requis.",
+      "invalid_email": "Veuillez entrer une adresse e-mail valide.",
       "invalid_token": "Jeton d'accès invalide. Veuillez vérifier votre jeton et réessayer.",
       "no_devices": "Aucun appareil trouvé dans votre compte Philips Air+.",
       "auth_failed": "Échec de l'authentification. Veuillez réessayer.",
       "cannot_connect": "Impossible de se connecter au service Philips Air+.",
+      "otp_send_failed": "Échec de l'envoi du code de vérification. Vérifiez votre adresse e-mail et réessayez.",
+      "otp_verify_failed": "Échec de la vérification du code. Assurez-vous de l'avoir saisi correctement.",
       "unknown": "Erreur inattendue lors de l'authentification."
     },
     "abort": {

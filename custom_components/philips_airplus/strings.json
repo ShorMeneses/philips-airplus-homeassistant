@@ -1,6 +1,13 @@
 {
   "config": {
     "step": {
+      "auth_method": {
+        "title": "Authentication Method",
+        "description": "Choose how you want to authenticate with your Philips account.\n\n**OAuth PKCE** — requires opening a browser and using DevTools Network tab to capture a redirect URL. Only works for accounts registered via the **Philips Air+ app**.\n\n**Email + verification code** — simpler: enter your email, receive a code, enter it. Works with both **Philips Air+** and **Philips HomeID** accounts.",
+        "data": {
+          "auth_method": "Authentication Method"
+        }
+      },
       "oauth": {
         "title": "Philips Air+ Authentication",
         "description": "1) Open this login URL in your browser:\n{authorize_url}\n\n2) Open DevTools (F12) → Network tab — before logging in.\n3) Complete Philips login and authorize the app.\n4) Find the `com.philips.air://loginredirect?code=...` redirect in the Network tab and copy the full URL.\n5) Paste it into the field below.",
@@ -21,14 +28,38 @@
       "reauth_confirm": {
         "title": "Re-authenticate Philips Air+",
         "description": "Your authentication token has expired. Please re-authenticate to continue using your Philips Air+ device."
+      },
+      "email": {
+        "title": "Philips Air+ Email Authentication",
+        "description": "Enter the email address associated with your Philips account. A verification code will be sent to this address.",
+        "data": {
+          "email": "Email Address"
+        }
+      },
+      "email_otp": {
+        "title": "Philips Air+ Verification Code",
+        "description": "A verification code has been sent to **{email}**. Check your inbox and enter the code below.",
+        "data": {
+          "otp_code": "Verification Code"
+        }
+      },
+      "email_otp_options": {
+        "title": "Philips Air+ Verification Code",
+        "description": "A verification code has been sent to **{email}**. Check your inbox and enter the code below.",
+        "data": {
+          "otp_code": "Verification Code"
+        }
       }
     },
     "error": {
       "missing_code": "Authorization code is required.",
+      "invalid_email": "Please enter a valid email address.",
       "invalid_token": "Invalid access token. Please check your token and try again.",
       "no_devices": "No devices found in your Philips Air+ account.",
       "auth_failed": "Authentication failed. Please try again.",
       "cannot_connect": "Unable to connect to Philips Air+ service.",
+      "otp_send_failed": "Failed to send verification code. Check your email address and try again.",
+      "otp_verify_failed": "Failed to verify the code. Make sure you entered it correctly.",
       "unknown": "Unexpected error during authentication."
     },
     "abort": {
