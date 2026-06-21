@@ -16,9 +16,10 @@ Custom integration for Philips Air+ air purifiers. It communicates with the Phil
 
 | Model | Modes | Fan Level | Filter Monitoring | Air Quality | Standby Monitor |
 |-------|-------|-----------|-------------------|-------------|-----------------|
-| AC0650/10 ✅ | Auto, Sleep, Turbo | Yes | Yes | PM2.5 | No |
-| AC0651/10 ✅ | Auto, Medium, Sleep, Turbo | Yes | Yes | PM2.5, Allergen Index | Yes |
-| AC1715/70 ❔ | Auto, Medium, Sleep, Fast, Turbo | Yes | PM2.5 | No |
+| AC0650/10 | Auto, Sleep, Turbo | Yes | Yes | PM2.5 | No |
+| AC0651/10 | Auto, Medium, Sleep, Turbo | Yes | Yes | PM2.5, Allergen Index | Yes |
+| AC1715/11 | Auto, Medium, Sleep, Fast, Turbo | Yes | Yes | PM2.5, Allergen Index | No |
+| AC1715/70 | Auto, Medium, Sleep, Fast, Turbo | Yes | Yes | PM2.5 | No |
 
 Other Air+ models sharing the same MQTT protocol may work but are untested. New models can be added via `models.yaml` without code changes.
 
@@ -97,6 +98,7 @@ Thanks to:
 - @vkostakos 
 - @markusstephany
 - @renaudallard — the email OTP authentication flow is adapted from the [Philips HomeID integration](https://github.com/renaudallard/homeassistant_philips_homeid)
+- @rgpublic — AC1715/11 model configuration
 
 ## License
 
