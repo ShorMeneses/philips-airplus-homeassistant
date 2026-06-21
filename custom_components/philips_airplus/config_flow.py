@@ -494,15 +494,20 @@ class PhilipsAirplusOptionsFlowHandler(config_entries.OptionsFlow):
         errors: Optional[Dict[str, str]] = None,
     ) -> FlowResult:
         """Render options form with current placeholders."""
+        device_name = self._entry.data.get(CONF_DEVICE_NAME, "Unknown")
+
         if self._auth_mode == AUTH_MODE_EMAIL_OTP:
-            device_name = self._entry.data.get(CONF_DEVICE_NAME, "Unknown")
             return self.async_show_form(
                 step_id="init",
                 data_schema=self._build_init_schema(enable_mqtt),
                 errors=errors or {},
                 description_placeholders={
                     "device_name": device_name,
-                    "authorize_url": "",
+                    "reauth_instructions": (
+                        "This integration was set up with email authentication. "
+                        "To re-authenticate, enter your email below to receive a "
+                        "new verification code."
+                    ),
                 },
             )
 
@@ -513,14 +518,22 @@ class PhilipsAirplusOptionsFlowHandler(config_entries.OptionsFlow):
             )
             self._oauth_authorize_url = await impl.async_generate_authorize_url(self._oauth_flow_id)
 
-        device_name = self._entry.data.get(CONF_DEVICE_NAME, "Unknown")
         return self.async_show_form(
             step_id="init",
             data_schema=self._build_init_schema(enable_mqtt, auth_code),
             errors=errors or {},
             description_placeholders={
                 "device_name": device_name,
-                "authorize_url": self._oauth_authorize_url,
+                "reauth_instructions": (
+                    "To re-authenticate via OAuth:\n\n"
+                    "1) Open this URL in your browser:\n"
+                    f"{self._oauth_authorize_url}\n\n"
+                    "2) Open DevTools (F12) → Network tab before logging in.\n"
+                    "3) Complete Philips login and authorize the app.\n"
+                    "4) Find the `com.philips.air://loginredirect?code=...` "
+                    "redirect and copy the full URL.\n"
+                    "5) Paste it into the field below."
+                ),
             },
         )
 

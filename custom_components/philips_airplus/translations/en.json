@@ -72,14 +72,16 @@
     "step": {
       "init": {
         "title": "Philips Air+ Options",
-        "description": "Device: {device_name}\n\nTo re-authenticate:\n1) Open this login URL in your browser:\n{authorize_url}\n\n2) Open DevTools (F12) → Network tab — before logging in.\n3) Complete Philips login and authorize the app.\n4) Find the `com.philips.air://loginredirect?code=...` redirect and copy the full URL.\n5) Paste it into the field below.\n\nLeave the field empty to keep current tokens unchanged.",
+        "description": "Device: {device_name}\n\n{reauth_instructions}\n\nLeave the field empty to keep current tokens unchanged.",
         "data": {
           "enable_mqtt": "Enable MQTT",
-          "auth_code": "Authorization Code (optional)"
+          "auth_code": "Authorization Code (optional)",
+          "email": "Email (optional)"
         },
         "data_description": {
           "enable_mqtt": "Disable to stop cloud/MQTT activity for this integration",
-          "auth_code": "Paste a fresh OAuth code to re-authenticate without removing the integration"
+          "auth_code": "Paste a fresh OAuth code to re-authenticate without removing the integration",
+          "email": "Enter your email to receive a new verification code"
         }
       }
     }
