@@ -176,6 +176,7 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     await api_client.close()
                     _LOGGER.info("IoT device list returned %d device(s)", len(devices_data))
 
+                    homeid_tokens = None
                     # Fallback: try HomeID client if Air+ tokens returned no devices
                     if not devices_data:
                         _LOGGER.info(
@@ -217,6 +218,15 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ]
 
                     if not self._devices:
+                        _LOGGER.error(
+                            "No devices found after all discovery attempts. "
+                            "Air+ IoT API: 0 devices. "
+                            "HomeID fallback: %s. "
+                            "HomeID backend API: %s. "
+                            "Check the Home Assistant logs for HomeID profile/appliance HTTP errors.",
+                            "attempted" if homeid_tokens else "not attempted",
+                            "attempted (empty/failed)" if homeid_tokens and not devices_data else "returned devices" if devices_data else "not attempted",
+                        )
                         errors["base"] = "no_devices"
                         return self.async_show_form(
                             step_id="email_otp",
