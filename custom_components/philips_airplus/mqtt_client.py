@@ -305,25 +305,28 @@ class PhilipsAirplusMQTTClient:
         return await loop.run_in_executor(None, self._blocking_connect)
 
     def shutdown(self) -> None:
-        """Permanent shutdown — suppress all future callbacks."""
+        """Permanent shutdown — tear down connection and suppress callbacks."""
         self._shutting_down = True
-        self.disconnect()
+        self._disconnect_internal()
 
     def disconnect(self) -> None:
-        """Disconnect from MQTT broker."""
+        """Disconnect from MQTT broker (used for clean reconnection)."""
+        self._disconnect_internal()
+
+    def _disconnect_internal(self) -> None:
+        """Actually tear down the paho connection and network thread."""
         with self._lock:
-            if self._shutting_down:
+            if self._client is None:
                 return
-            if self._client:
-                try:
-                    self._client.loop_stop()
-                    self._client.disconnect()
-                    _LOGGER.debug("MQTT disconnected")
-                except Exception as ex:
-                    _LOGGER.error("Error disconnecting MQTT: %s", ex)
-                finally:
-                    self._client = None
-            self._connected = False
+            try:
+                self._client.loop_stop()
+                self._client.disconnect()
+                _LOGGER.debug("MQTT disconnected")
+            except Exception as ex:
+                _LOGGER.error("Error disconnecting MQTT: %s", ex)
+            finally:
+                self._client = None
+        self._connected = False
 
     def is_connected(self) -> bool:
         """Check if MQTT client is connected.
