@@ -16,7 +16,6 @@ USER_SELF_ENDPOINT = f"{API_BASE_URL}/da/user/self"
 # correct region.  Users outside the EU may have devices only visible on
 # their regional (or the global) endpoint.
 FALLBACK_API_HOSTS = [
-    "prod.global-da.iot.versuni.com",
     "prod.us-da.iot.versuni.com",
     "prod.ap-da.iot.versuni.com",
 ]

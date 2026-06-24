@@ -77,8 +77,8 @@ class PhilipsAirplusAPIClient:
         """List all devices associated with the account.
 
         Tries the default EU endpoint first, then falls back to other
-        regional endpoints (global, us, ap) in case the account is
-        registered outside the EU region.
+        regional endpoints (us, ap) in case the account is registered
+        outside the EU region.
         """
         hosts_to_try = [API_HOST] + FALLBACK_API_HOSTS
         tried: List[str] = []
