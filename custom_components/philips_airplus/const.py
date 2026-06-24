@@ -11,6 +11,16 @@ DEVICE_ENDPOINT = f"{API_BASE_URL}/da/user/self/device"
 SIGNATURE_ENDPOINT = f"{API_BASE_URL}/da/user/self/signature"
 USER_SELF_ENDPOINT = f"{API_BASE_URL}/da/user/self"
 
+# Regional API hosts to try when the default EU endpoint returns no devices.
+# The official app uses prod.global-da.iot.versuni.com which routes to the
+# correct region.  Users outside the EU may have devices only visible on
+# their regional (or the global) endpoint.
+FALLBACK_API_HOSTS = [
+    "prod.global-da.iot.versuni.com",
+    "prod.us-da.iot.versuni.com",
+    "prod.ap-da.iot.versuni.com",
+]
+
 # HTTP identity
 # Keep a mobile-style user agent to better match official app traffic.
 HTTP_USER_AGENT = "okhttp/4.12.0 (Android 14; Pixel 7)"
