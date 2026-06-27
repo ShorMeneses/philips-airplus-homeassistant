@@ -55,7 +55,7 @@
       "missing_code": "Autorisierungscode ist erforderlich.",
       "invalid_email": "Bitte gib eine gültige E-Mail-Adresse ein.",
       "invalid_token": "Ungültiger Zugriffstoken. Bitte überprüfe deinen Token und versuche es erneut.",
-      "no_devices": "Keine Geräte in deinem Philips Air+ Konto gefunden.",
+      "no_devices": "Keine Geräte gefunden. Authentifizierung erfolgreich, aber die Integration konnte keine Geräte erkennen. Stelle sicher, dass deine Geräte in der Philips Air+ App hinzugefügt wurden und überprüfe die Home Assistant Logs für Details.",
       "auth_failed": "Authentifizierung fehlgeschlagen. Bitte versuche es erneut.",
       "cannot_connect": "Verbindung zum Philips Air+ Dienst nicht möglich.",
       "otp_send_failed": "Senden des Bestätigungscodes fehlgeschlagen. Überprüfe deine E-Mail-Adresse und versuche es erneut.",

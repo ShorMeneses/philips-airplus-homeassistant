@@ -55,7 +55,7 @@
       "missing_code": "Le code d'autorisation est requis.",
       "invalid_email": "Veuillez entrer une adresse e-mail valide.",
       "invalid_token": "Jeton d'accès invalide. Veuillez vérifier votre jeton et réessayer.",
-      "no_devices": "Aucun appareil trouvé dans votre compte Philips Air+.",
+      "no_devices": "Aucun appareil trouvé. L'authentification a réussi mais l'intégration n'a pas pu découvrir d'appareils. Assurez-vous que vos appareils sont ajoutés dans l'application Philips Air+ et vérifiez les logs Home Assistant pour plus de détails.",
       "auth_failed": "Échec de l'authentification. Veuillez réessayer.",
       "cannot_connect": "Impossible de se connecter au service Philips Air+.",
       "otp_send_failed": "Échec de l'envoi du code de vérification. Vérifiez votre adresse e-mail et réessayez.",

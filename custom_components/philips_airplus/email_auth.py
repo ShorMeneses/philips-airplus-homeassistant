@@ -381,8 +381,10 @@ class EmailOTPAuth:
         if not profile_url:
             _LOGGER.warning("HomeID discovery missing profileUrl, keys: %s", list(discovery.keys()))
             return []
+        _LOGGER.info("HomeID discovery profileUrl: %s", profile_url)
+        profile_url = re.sub(r"\{[^}]*\}", "", profile_url)
         if profile_url.startswith("/"):
-            profile_url = f"{HOMEID_BACKEND_API}{profile_url}"
+            profile_url = f"{HOMEID_BACKEND_BASE}{profile_url}"
 
         ts = int(time.time() * 1000)
         headers = {

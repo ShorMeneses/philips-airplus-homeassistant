@@ -10,7 +10,9 @@ import aiohttp
 
 from .const import (
     API_BASE_URL,
+    API_HOST,
     DEVICE_ENDPOINT,
+    FALLBACK_API_HOSTS,
     HTTP_USER_AGENT,
     SIGNATURE_ENDPOINT,
 )
@@ -72,33 +74,53 @@ class PhilipsAirplusAPIClient:
             raise PhilipsAirplusAPIError(f"Invalid JSON response: {ex}") from ex
 
     async def list_devices(self) -> List[Dict[str, Any]]:
-        """List all devices associated with the account."""
-        try:
-            data = await self._fetch_json(DEVICE_ENDPOINT)
-            devices = []
+        """List all devices associated with the account.
 
-            if isinstance(data, dict):
-                if isinstance(data.get("devices"), list):
-                    devices = data["devices"]
-                else:
-                    # Fallback: locate any list with uuid entries
-                    for key, value in data.items():
-                        if isinstance(value, list) and any(
-                            isinstance(item, dict) and item.get("uuid")
-                            for item in value
-                        ):
-                            devices = value
-                            break
-            elif isinstance(data, list):
-                devices = data
+        Tries the default EU endpoint first, then falls back to other
+        regional endpoints (us, ap) in case the account is registered
+        outside the EU region.
+        """
+        hosts_to_try = [API_HOST] + FALLBACK_API_HOSTS
+        tried: List[str] = []
+        for host in hosts_to_try:
+            endpoint = f"https://{host}/api/da/user/self/device"
+            tried.append(host)
+            try:
+                data = await self._fetch_json(endpoint)
+            except PhilipsAirplusAPIError as ex:
+                _LOGGER.warning("Device list failed for %s: %s", host, ex)
+                continue
 
-            _LOGGER.debug("Found %d devices", len(devices))
-            return devices
+            devices = self._parse_device_list(data)
+            if devices:
+                _LOGGER.info("Found %d device(s) via %s", len(devices), host)
+                return devices
+            _LOGGER.info("No devices on %s, trying next region...", host)
 
-        except PhilipsAirplusAPIError:
-            raise
-        except Exception as ex:
-            raise PhilipsAirplusAPIError(f"Failed to list devices: {ex}") from ex
+        _LOGGER.warning(
+            "No devices found on any regional endpoint (tried: %s)", tried
+        )
+        return []
+
+    @staticmethod
+    def _parse_device_list(data: Any) -> List[Dict[str, Any]]:
+        """Extract device list from various API response shapes."""
+        devices: List[Dict[str, Any]] = []
+        if isinstance(data, dict):
+            if isinstance(data.get("devices"), list):
+                devices = data["devices"]
+            else:
+                # Fallback: locate any list with uuid entries
+                for key, value in data.items():
+                    if isinstance(value, list) and any(
+                        isinstance(item, dict) and item.get("uuid")
+                        for item in value
+                    ):
+                        devices = value
+                        break
+        elif isinstance(data, list):
+            devices = data
+        return devices
 
     async def fetch_signature(self) -> str:
         """Fetch MQTT signature."""
