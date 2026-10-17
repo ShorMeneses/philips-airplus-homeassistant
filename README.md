@@ -18,6 +18,7 @@ Custom integration for Philips Air+ air purifiers. It communicates with the Phil
 |-------|-------|-----------|-------------------|-------------|-----------------|
 | AC0650/10 | Auto, Sleep, Turbo | Yes | Yes | PM2.5 | No |
 | AC0651/10 | Auto, Medium, Sleep, Turbo | Yes | Yes | PM2.5, Allergen Index | Yes |
+| AC1715/10 | Auto, Medium, Sleep, Fast, Turbo | Yes | Yes | PM2.5, Allergen Index | No |
 | AC1715/11 | Auto, Medium, Sleep, Fast, Turbo | Yes | Yes | PM2.5, Allergen Index | No |
 | AC1715/70 | Auto, Medium, Sleep, Fast, Turbo | Yes | Yes | PM2.5 | No |
 | AC1715/71 | Auto, Sleep, Medium, Fast, Turbo | Yes | Yes | PM2.5 | No |
@@ -99,7 +100,7 @@ Thanks to:
 - @vkostakos 
 - @markusstephany
 - @renaudallard — the email OTP authentication flow is adapted from the [Philips HomeID integration](https://github.com/renaudallard/homeassistant_philips_homeid)
-- @rgpublic — AC1715/11 model configuration
+- @rgpublic — AC1715/10 and AC1715/10 models configuration
 - @elipalchan — AC1715/71 model configuration
 
 ## License
