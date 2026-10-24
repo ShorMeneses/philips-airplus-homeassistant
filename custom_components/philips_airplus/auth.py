@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -34,6 +35,12 @@ _LOGGER = logging.getLogger(__name__)
 
 class AuthenticationExpired(Exception):
     """Raised when authentication has expired and reauth is required."""
+
+    pass
+
+
+class AuthenticationUnavailable(Exception):
+    """Raised when authentication cannot be checked due to a temporary failure."""
 
     pass
 
@@ -194,6 +201,12 @@ class PhilipsAirplusAuth:
             self.signature = await self._fetch_signature()
 
             return True
+        except (AuthenticationExpired, AuthenticationUnavailable):
+            # Let callers distinguish invalid credentials from a temporary
+            # network/service failure. Treating the latter as an auth failure
+            # would force the user through reauthentication whenever the
+            # internet is down.
+            raise
         except Exception as ex:
             _LOGGER.error("Auth initialization failed: %s", ex)
             return False
@@ -238,73 +251,27 @@ class PhilipsAirplusAuth:
             _LOGGER.error("Cannot refresh token: missing refresh_token or client_id")
             return False
 
+        impl = PhilipsAirplusOAuth2Implementation(
+            self.hass, client_id=self._client_id
+        )
         try:
-            impl = PhilipsAirplusOAuth2Implementation(
-                self.hass, client_id=self._client_id
-            )
             token_data = await impl.async_refresh_token(self.refresh_token)
-
-            self.access_token = token_data.get("access_token") or token_data.get(
-                "accessToken"
+        except (aiohttp.ClientError, asyncio.TimeoutError) as ex:
+            # The token endpoint could not be reached. Keep the stored tokens
+            # untouched so the integration can recover once the internet is
+            # back instead of forcing the user through reauthentication.
+            _LOGGER.warning(
+                "Token refresh temporarily unavailable due to a network error: %s", ex
             )
-            new_refresh = token_data.get("refresh_token") or token_data.get(
-                "refreshToken"
-            )
-            if new_refresh:
-                self.refresh_token = new_refresh
-
-            # Check for 'exp' (timestamp) first, then 'expires_in' (duration)
-            exp = token_data.get("exp")
-            expires_in = token_data.get("expires_in")
-
-            if exp:
-                self.expires_at = datetime.fromtimestamp(int(exp))
-                _LOGGER.debug(
-                    "Token refreshed, expires at (from exp): %s", self.expires_at
-                )
-            elif expires_in:
-                self.expires_at = datetime.now() + timedelta(seconds=int(expires_in))
-                _LOGGER.debug(
-                    "Token refreshed, expires at (from expires_in): %s", self.expires_at
-                )
-
-            # After refreshing the token, fetch a matching signature. A stale
-            # signature will cause every subsequent MQTT (re)connect to be
-            # rejected by the custom authorizer, so callers that reconnect
-            # should also call refresh_signature() before connecting.
-            if not await self.refresh_signature():
-                _LOGGER.warning(
-                    "Signature could not be refreshed after token refresh; "
-                    "it will be retried before the next MQTT reconnect"
-                )
-
-            _LOGGER.info("Successfully refreshed access token")
-
-            # Notify callback if registered
-            if self._token_callback:
-                try:
-                    await self._token_callback(
-                        {
-                            "access_token": self.access_token,
-                            "refresh_token": self.refresh_token,
-                            "expires_at": self.expires_at.timestamp()
-                            if self.expires_at
-                            else None,
-                            "client_id": self._client_id,
-                        }
-                    )
-                except Exception as cb_ex:
-                    _LOGGER.error("Failed to execute token callback: %s", cb_ex)
-
-            return True
+            raise AuthenticationUnavailable(
+                "Token endpoint unreachable"
+            ) from ex
         except RuntimeError as ex:
             error_msg = str(ex)
-            # Check if refresh token is revoked/expired (400 with invalid_grant or 401)
-            if (
-                "400" in error_msg and "invalid_grant" in error_msg
-            ) or "401" in error_msg:
+            if self._is_permanent_refresh_error(error_msg):
                 _LOGGER.error(
-                    "Refresh token has expired or been revoked. Triggering re-authentication."
+                    "Refresh token has expired or been revoked. "
+                    "Triggering re-authentication."
                 )
                 # Clear refresh token to prevent further attempts
                 self.refresh_token = None
@@ -312,42 +279,125 @@ class PhilipsAirplusAuth:
                 raise AuthenticationExpired(
                     "Token refresh failed - reauthentication required"
                 ) from ex
-            else:
-                _LOGGER.error("Failed to refresh token: %s", ex)
-            return False
+            _LOGGER.warning("Token refresh failed temporarily: %s", ex)
+            raise AuthenticationUnavailable("Token refresh failed") from ex
         except Exception as ex:
-            _LOGGER.error("Failed to refresh token: %s", ex)
+            _LOGGER.warning("Unexpected token refresh failure: %s", ex)
+            raise AuthenticationUnavailable("Token refresh failed") from ex
+
+        self.access_token = token_data.get("access_token") or token_data.get(
+            "accessToken"
+        )
+        new_refresh = token_data.get("refresh_token") or token_data.get(
+            "refreshToken"
+        )
+        if new_refresh:
+            self.refresh_token = new_refresh
+
+        # Check for 'exp' (timestamp) first, then 'expires_in' (duration)
+        exp = token_data.get("exp")
+        expires_in = token_data.get("expires_in")
+
+        if exp:
+            self.expires_at = datetime.fromtimestamp(int(exp))
+            _LOGGER.debug(
+                "Token refreshed, expires at (from exp): %s", self.expires_at
+            )
+        elif expires_in:
+            self.expires_at = datetime.now() + timedelta(seconds=int(expires_in))
+            _LOGGER.debug(
+                "Token refreshed, expires at (from expires_in): %s", self.expires_at
+            )
+
+        # After refreshing the token, fetch a matching signature. A stale
+        # signature will cause every subsequent MQTT (re)connect to be
+        # rejected by the custom authorizer, so callers that reconnect
+        # should also call refresh_signature() before connecting.
+        if not await self.refresh_signature():
+            _LOGGER.warning(
+                "Signature could not be refreshed after token refresh; "
+                "it will be retried before the next MQTT reconnect"
+            )
+
+        _LOGGER.info("Successfully refreshed access token")
+
+        # Notify callback if registered
+        if self._token_callback:
+            try:
+                await self._token_callback(
+                    {
+                        "access_token": self.access_token,
+                        "refresh_token": self.refresh_token,
+                        "expires_at": self.expires_at.timestamp()
+                        if self.expires_at
+                        else None,
+                        "client_id": self._client_id,
+                    }
+                )
+            except Exception as cb_ex:
+                _LOGGER.error("Failed to execute token callback: %s", cb_ex)
+
+        return True
+
+    @staticmethod
+    def _is_permanent_refresh_error(error_msg: str) -> bool:
+        """Return True only for rejected/revoked refresh tokens.
+
+        Network failures and server-side 5xx responses must not clear the
+        refresh token or trigger a reauthentication flow.
+        """
+        match = re.match(r"Refresh token request failed: (\d{3})\b", error_msg)
+        if not match:
             return False
+        status = int(match.group(1))
+        if status in (401, 403):
+            return True
+        return status == 400 and "invalid_grant" in error_msg.lower()
+
+    async def _fetch_authenticated_json(
+        self, url: str, description: str
+    ) -> Dict[str, Any]:
+        """Fetch a JSON endpoint, distinguishing auth and transient failures."""
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "User-Agent": HTTP_USER_AGENT,
+            "Accept": "application/json",
+        }
+        session = async_get_clientsession(self.hass)
+
+        try:
+            async with session.get(url, headers=headers) as response:
+                if response.status in (401, 403):
+                    raise AuthenticationExpired(
+                        f"{description} rejected: HTTP {response.status}"
+                    )
+                if response.status != 200:
+                    raise AuthenticationUnavailable(
+                        f"{description} failed: HTTP {response.status}"
+                    )
+                return await response.json()
+        except (AuthenticationExpired, AuthenticationUnavailable):
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as ex:
+            raise AuthenticationUnavailable(
+                f"{description} request failed: {ex}"
+            ) from ex
+        except json.JSONDecodeError as ex:
+            raise AuthenticationUnavailable(
+                f"{description} returned invalid JSON: {ex}"
+            ) from ex
+        except Exception as ex:
+            raise AuthenticationUnavailable(f"{description} failed: {ex}") from ex
 
     async def _fetch_user_id(self) -> str:
         """Fetch user ID from API."""
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": HTTP_USER_AGENT,
-            "Accept": "application/json",
-        }
-        session = async_get_clientsession(self.hass)
-
-        async with session.get(USER_SELF_ENDPOINT, headers=headers) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Failed to fetch user ID: {response.status}")
-            data = await response.json()
-            return data.get("id")
+        data = await self._fetch_authenticated_json(USER_SELF_ENDPOINT, "User profile")
+        return data.get("id")
 
     async def _fetch_signature(self) -> str:
         """Fetch signature from API."""
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": HTTP_USER_AGENT,
-            "Accept": "application/json",
-        }
-        session = async_get_clientsession(self.hass)
-
-        async with session.get(SIGNATURE_ENDPOINT, headers=headers) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Failed to fetch signature: {response.status}")
-            data = await response.json()
-            return data.get("signature")
+        data = await self._fetch_authenticated_json(SIGNATURE_ENDPOINT, "Signature")
+        return data.get("signature")
 
     async def close(self) -> None:
         """Close resources."""

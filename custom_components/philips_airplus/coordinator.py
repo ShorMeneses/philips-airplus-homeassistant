@@ -10,11 +10,15 @@ from typing import Any, Dict, List, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import PhilipsAirplusAPIClient, build_client_id
-from .auth import PhilipsAirplusAuth, AuthenticationExpired
+from .auth import (
+    AuthenticationExpired,
+    AuthenticationUnavailable,
+    PhilipsAirplusAuth,
+)
 from .const import (
     AUTH_MODE_OAUTH,
     DOMAIN,
@@ -240,8 +244,14 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             raise ConfigEntryAuthFailed(
                 "Authentication expired, please re-authenticate"
             ) from ex
-        except ConfigEntryAuthFailed:
-            # Re-raise ConfigEntryAuthFailed as-is
+        except AuthenticationUnavailable as ex:
+            # Internet/DNS/timeout errors are retryable. Do not send the user
+            # through reauthentication just because the network is down.
+            raise ConfigEntryNotReady(
+                f"Philips authentication temporarily unavailable: {ex}"
+            ) from ex
+        except (ConfigEntryAuthFailed, ConfigEntryNotReady):
+            # Re-raise HA setup control-flow exceptions as-is
             raise
         except Exception as ex:
             raise UpdateFailed(f"Failed to set up coordinator: {ex}") from ex
@@ -315,6 +325,15 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                                     )
                                     self.entry.async_start_reauth(self.hass)
                                     return
+                                except AuthenticationUnavailable as ex:
+                                    _LOGGER.warning(
+                                        "Token refresh temporarily unavailable for %s: %s; retrying in %ss",
+                                        self._device_name,
+                                        ex,
+                                        min(delay * 2, max_delay),
+                                    )
+                                    delay = min(delay * 2, max_delay)
+                                    continue
 
                                 await self._auth.refresh_signature()
                                 self._mqtt_client.access_token = (
@@ -591,6 +610,12 @@ class PhilipsAirplusDataCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             # Token refresh failed permanently - trigger HA's reauth flow
             raise ConfigEntryAuthFailed(
                 "Authentication expired, please re-authenticate"
+            ) from ex
+        except AuthenticationUnavailable as ex:
+            # A temporary network/token-endpoint failure must not trigger
+            # reauthentication. Mark this poll as failed and retry later.
+            raise UpdateFailed(
+                f"Philips authentication temporarily unavailable: {ex}"
             ) from ex
 
         # Self-healing: if we are disconnected and no reconnect task is

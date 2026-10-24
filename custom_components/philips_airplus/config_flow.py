@@ -13,7 +13,12 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.data_entry_flow import FlowResult
 
-from .auth import PhilipsAirplusAuth, PhilipsAirplusOAuth2Implementation
+from .auth import (
+    AuthenticationExpired,
+    AuthenticationUnavailable,
+    PhilipsAirplusAuth,
+    PhilipsAirplusOAuth2Implementation,
+)
 from .api import PhilipsAirplusAPIClient, PhilipsAirplusDevice
 from .email_auth import EmailOTPAuth, EmailOTPAuthError
 from .const import (
@@ -401,7 +406,12 @@ class PhilipsAirplusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             self._auth._client_id = self._client_id
 
-            if await self._auth.initialize():
+            try:
+                auth_ok = await self._auth.initialize()
+            except (AuthenticationExpired, AuthenticationUnavailable):
+                auth_ok = False
+
+            if auth_ok:
                 data = {
                     CONF_AUTH_MODE: self._auth_mode,
                     CONF_ACCESS_TOKEN: self._access_token,
